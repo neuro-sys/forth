@@ -1,0 +1,3 @@
+cls
+C:\Users\neurosys\nasm-2.15.05\nasm -f win32 -w-zeroing -l forth-x86.lst -o forth-x86.o forth-x86.asm
+link forth-x86.o /entry:start /subsystem:console
