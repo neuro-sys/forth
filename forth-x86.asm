@@ -2,15 +2,19 @@
 ;			      ANS Forth
 ; ====================================================================== ;
 ;
+; Description
+; ===========
 ; This program creates a Forth system for intel x86 for Linux.
 ;
-; It uses 8 character tab width.
+; Conventions
+; ===========
+; - It uses 8 character tab width.
+; - Counted strings use 1 cell for the count
+; - There are no double numbers (probably not a good idea)
 ;
-; Deviations from the standard at the moment:
-;  - Counted strings use 1 cell for the count
-;  - There are no double numbers (probably not a good idea)
-;
-; To build:
+; Build
+; =====
+; A compile.sh script is provided. But here is an example:
 ;
 ; nasm -f elf32		\
 ;      -w-zeroing	\
@@ -24,6 +28,22 @@
 ;      -o forth-x86	\
 ;      forth-x86.o &&	\
 ; ./forth-x86
+;
+; TODO
+; ====
+; - Reduce the primitive words size
+; - Reduce the size of bootstrap compiler
+; - Add Windows support
+; - Add PC boot support
+; - Implement rest of the CORE word set
+; - Implement BLOCK word set
+;
+; Change Log
+; ==========
+; 20211215 - Change log added, code formatted, todo added.
+;
+
+
 			    global _start
 
 			    section .bss
@@ -43,6 +63,10 @@ tib:		resd	TIB_SIZ	; Terminal input buffer area
 dictionary:	resd	DIC_SIZ	; Consider making this parametrized
 tempregs:	resd	16	; Temporary storage for host registers
 
+; ====================================================================== ;
+;			      Entry point
+; ====================================================================== ;
+
 			    section .text
 
 _start:
@@ -59,104 +83,104 @@ _start:
 ; ====================================================================== ;
 ; Dictionary entry structure looks like this:
 ;
-; link		cell
-; count+masks	cell
-; name		byte[]
-; code		<machine code>
+; link		1 cell
+; count+masks	1 cell
+; name		N bytes
+; code		N bytes
 ;
-		
+
 m_immediate	equ	(1 << 31)
 m_compile_only	equ	(1 << 30)
 count_mask	equ	~(m_immediate + m_compile_only)
 
-w_cell		dd	0		; Previous word link address
-		dd	4		; Name count
-		db	"cell"		; Name
-xt_cell		call	xt_doconst		; Code field
-@_cell		dd	4		; Parameter field
+w_cell:		dd	0		; link
+		dd	4		; count+masks
+		db	"cell"		; name
+xt_cell:	call	xt_doconst	; code
+@_cell:		dd	4		; parameter
 
-w_dp		dd	w_cell
+w_dp:		dd	w_cell
 		dd	2
 		db	"dp"
-xt_dp		call	xt_dovar
-@_dp		dd	dictionary
+xt_dp:		call	xt_dovar
+@_dp:		dd	dictionary
 
-w_num_tib	dd	w_dp
+w_num_tib:	dd	w_dp
 		dd	4
 		db	"#tib"
-xt_num_tib	call	xt_dovar
-@_num_tib	dd	0
+xt_num_tib:	call	xt_dovar
+@_num_tib:	dd	0
 
-w_max_num_tib	dd	w_num_tib
+w_max_num_tib:	dd	w_num_tib
 		dd	7
 		db	"max#tib"
-xt_max_num_tib	call	xt_doconst
-@_max_num_tib	dd	TIB_SIZ
+xt_max_num_tib:	call	xt_doconst
+@_max_num_tib:	dd	TIB_SIZ
 
-w_to_in		dd	w_max_num_tib
+w_to_in:	dd	w_max_num_tib
 		dd	3
 		db	">in"
-xt_to_in	call	xt_dovar
-@_to_in		dd	0
+xt_to_in:	call	xt_dovar
+@_to_in:	dd	0
 
-w_state		dd	w_to_in
+w_state:	dd	w_to_in
 		dd	5
 		db	"state"
-xt_state	call	xt_dovar
-@_state		dd	0
+xt_state:	call	xt_dovar
+@_state:	dd	0
 
-w_last		dd	w_state
+w_last:		dd	w_state
 		dd	4
 		db	"last"
-xt_last		call	xt_dovar
-@_last		dd	0
+xt_last:	call	xt_dovar
+@_last:		dd	0
 
-w_source_id	dd	w_last
+w_source_id:	dd	w_last
 		dd	9
 		db	"source-id"
-xt_source_id	call	xt_dovar
-@_source_id	dd	0
+xt_source_id:	call	xt_dovar
+@_source_id:	dd	0
 
 
-w_base		dd	w_source_id
+w_base:		dd	w_source_id
 		dd	4
 		db	"base"
-xt_base		call	xt_dovar
-@_base		dd	10
+xt_base:	call	xt_dovar
+@_base:		dd	10
 
 
-w_s0		dd	w_base
+w_s0:		dd	w_base
 		dd	2
 		db	"s0"
-xt_s0		call	xt_doconst
-@_s0		dd	dstacke
+xt_s0:		call	xt_doconst
+@_s0:		dd	dstacke
 
-w_r0		dd	w_s0
+w_r0:		dd	w_s0
 		dd	2
 		db	"r0"
-xt_r0		call	xt_doconst
-@_r0		dd	rstacke
+xt_r0:		call	xt_doconst
+@_r0:		dd	rstacke
 
-w_tib		dd	w_r0
+w_tib:		dd	w_r0
 		dd	3
 		db	"tib"
-xt_tib		call	xt_doconst
-@_tib		dd	tib
+xt_tib:		call	xt_doconst
+@_tib:		dd	tib
 
-w_dovar		dd	w_tib
+w_dovar:	dd	w_tib
 		dd	5
 		db	"(var)"
-xt_dovar	xchg	ebp,esp
+xt_dovar:	xchg	ebp,esp
 		mov	eax,[ebp]
 		push	eax
 		xchg	ebp,esp
 		add	esp,4
 		ret
 
-w_doconst	dd	w_dovar
+w_doconst:	dd	w_dovar
 		dd	7
 		db	"(const)"
-xt_doconst	xchg	ebp,esp
+xt_doconst:	xchg	ebp,esp
 		mov	eax,[ebp]
 		mov	eax,[eax]
 		push	eax
@@ -164,27 +188,27 @@ xt_doconst	xchg	ebp,esp
 		add	esp,4
 		ret
 
-w_dolit		dd	w_doconst
+w_dolit:	dd	w_doconst
 		dd	5
 		db	"(lit)"
-xt_dolit	xchg	ebp,esp
+xt_dolit:	xchg	ebp,esp
 		mov	eax,[ebp]
 		push	dword[eax]
 		xchg	ebp,esp
 		add	dword[esp],4
 		ret
 
-w_branch	dd	w_dolit
+w_branch:	dd	w_dolit
 		dd	8
 		db	"(branch)"
-xt_branch	pop	eax
+xt_branch:	pop	eax
 		mov	eax,[eax]
 		jmp	eax
 
-w_0branch	dd	w_branch
+w_0branch:	dd	w_branch
 		dd	9
 		db	"(0branch)"
-xt_0branch	xchg	ebp,esp
+xt_0branch:	xchg	ebp,esp
 		pop	eax
 		xchg	ebp,esp
 		test	eax,eax
@@ -192,59 +216,59 @@ xt_0branch	xchg	ebp,esp
 		pop	eax
 		mov	eax,[eax]
 		jmp	eax
-_0branch_nz	add	dword[esp],4
+_0branch_nz:	add	dword[esp],4
 		ret
 
-w_bye		dd	w_0branch
+w_bye:		dd	w_0branch
 		dd	3
 		db	"bye"
-xt_bye		mov	ebp,[tempregs+0]
+xt_bye:		mov	ebp,[tempregs+0]
 		mov	esp,[tempregs+1]
 		call	sys_bye
 
-w_execute	dd	w_bye
+w_execute:	dd	w_bye
 		dd	7
 		db	"execute"
-xt_execute	xchg	ebp,esp
+xt_execute:	xchg	ebp,esp
 		pop	eax
 		xchg	ebp,esp
 		pop	ebx
 		push	eax
 		ret
 
-w_store		dd	w_execute
+w_store:	dd	w_execute
 		dd	1
 		db	"!"
-xt_store	xchg	ebp,esp
+xt_store:	xchg	ebp,esp
 		pop	eax
 		pop	ebx
 		mov	[eax],ebx
 		xchg	ebp,esp
 		ret
 
-w_fetch		dd	w_store
+w_fetch:	dd	w_store
 		dd	1
 		db	"@"
-xt_fetch	xchg	ebp,esp
+xt_fetch:	xchg	ebp,esp
 		pop	eax
 		push	dword[eax]
 		xchg	ebp,esp
 		ret
 
-w_cstore	dd	w_fetch
+w_cstore:	dd	w_fetch
 		dd	2
 		db	"c!"
-xt_cstore	xchg	ebp,esp
+xt_cstore:	xchg	ebp,esp
 		pop	eax
 		pop	ebx
 		mov	byte[eax],bl
 		xchg	ebp,esp
 		ret
 
-w_cfetch	dd	w_cstore
+w_cfetch:	dd	w_cstore
 		dd	2
 		db	"c@"
-xt_cfetch	xchg	ebp,esp
+xt_cfetch:	xchg	ebp,esp
 		pop	eax
 		xor	ebx,ebx
 		mov	bl,byte[eax]
@@ -252,10 +276,10 @@ xt_cfetch	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_plus		dd	w_cfetch
+w_plus:		dd	w_cfetch
 		dd	1
 		db	"+"
-xt_plus		xchg	ebp,esp
+xt_plus:	xchg	ebp,esp
 		pop	eax
 		pop	ebx
 		add	eax,ebx
@@ -263,10 +287,10 @@ xt_plus		xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_minus		dd	w_plus
+w_minus:	dd	w_plus
 		dd	1
 		db	"-"
-xt_minus	xchg	ebp,esp
+xt_minus:	xchg	ebp,esp
 		pop	ebx
 		pop	eax
 		sub	eax,ebx
@@ -274,21 +298,23 @@ xt_minus	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_times		dd	w_minus
-		dd	1
-		db	"*"
-xt_times	xchg	ebp,esp
-		pop	eax
+w_um_star:	dd	w_minus
+		dd	3
+		db	"um*"
+xt_um_star:	xchg	ebp,esp
 		pop	ebx
-		imul	ebx
+		pop	eax
+		xor	edx,edx
+		mul	ebx
+		push	edx
 		push	eax
 		xchg	ebp,esp
 		ret
 
-w_um_mod	dd	w_times
+w_um_mod:	dd	w_um_star
 		dd	6
 		db	"um/mod"
-xt_um_mod	xchg	ebp,esp
+xt_um_mod:	xchg	ebp,esp
 		pop	ebx
 		pop	eax
 		xor	edx,edx
@@ -298,10 +324,10 @@ xt_um_mod	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_to_r		dd	w_um_mod
+w_to_r:		dd	w_um_mod
 		dd	2
 		db	">r"
-xt_to_r		pop	eax
+xt_to_r:	pop	eax
 		xchg	ebp,esp
 		pop	ebx
 		xchg	ebp,esp
@@ -309,10 +335,10 @@ xt_to_r		pop	eax
 		push	eax
 		ret
 
-w_r_from	dd	w_to_r
+w_r_from:	dd	w_to_r
 		dd	2
 		db	"r>"
-xt_r_from	pop	eax
+xt_r_from:	pop	eax
 		pop	ebx
 		xchg	ebp,esp
 		push	ebx
@@ -320,10 +346,10 @@ xt_r_from	pop	eax
 		push	eax
 		ret
 
-w_and		dd	w_r_from
+w_and:		dd	w_r_from
 		dd	3
 		db	"and"
-xt_and		xchg	ebp,esp
+xt_and:		xchg	ebp,esp
 		pop	eax
 		pop	ebx
 		and	eax,ebx
@@ -331,10 +357,10 @@ xt_and		xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_or		dd	w_and
+w_or:		dd	w_and
 		dd	2
 		db	"or"
-xt_or		xchg	ebp,esp
+xt_or:		xchg	ebp,esp
 		pop	eax
 		pop	ebx
 		or	eax,ebx
@@ -342,10 +368,10 @@ xt_or		xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_xor		dd	w_or
+w_xor:		dd	w_or
 		dd	3
 		db	"xor"
-xt_xor		xchg	ebp,esp
+xt_xor:		xchg	ebp,esp
 		pop	eax
 		pop	ebx
 		xor	eax,ebx
@@ -353,41 +379,41 @@ xt_xor		xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_invert	dd	w_xor
+w_invert:	dd	w_xor
 		dd	6
 		db	"invert"
-xt_invert	call	xt_dolit
+xt_invert:	call	xt_dolit
 		dd	-1
 		call	xt_xor
 		ret
 
-w_zero_less	dd	w_invert
+w_zero_less:	dd	w_invert
 		dd	2
 		db	"0<"
-xt_zero_less	xchg	ebp,esp
+xt_zero_less:	xchg	ebp,esp
 		pop	eax
 		cmp	eax,0
 		jl	xt_zero_less_l
 		mov	eax,0
 		jmp	xt_zero_less_e
-xt_zero_less_l	mov	eax,-1
-xt_zero_less_e	push	eax
+xt_zero_less_l:	mov	eax,-1
+xt_zero_less_e:	push	eax
 		xchg	ebp,esp
 		ret
 
-w_swap		dd	w_zero_less
+w_swap:		dd	w_zero_less
 		dd	4
 		db	"swap"
-xt_swap		mov	eax,[ebp]
+xt_swap:	mov	eax,[ebp]
 		mov	ebx,[ebp+4]
 		mov	[ebp],ebx
 		mov	[ebp+4],eax
 		ret
 
-w_rot		dd	w_swap
+w_rot:		dd	w_swap
 		dd	3
 		db	"rot"
-xt_rot		xchg	ebp,esp
+xt_rot:		xchg	ebp,esp
 		pop	ecx
 		pop	ebx
 		pop	eax
@@ -397,24 +423,24 @@ xt_rot		xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_drop		dd	w_rot
+w_drop:		dd	w_rot
 		dd	4
 		db	"drop"
-xt_drop		add	ebp,4
+xt_drop:	add	ebp,4
 		ret
 
-w_dup		dd	w_drop
+w_dup:		dd	w_drop
 		dd	3
 		db	"dup"
-xt_dup		xchg	ebp,esp
+xt_dup:		xchg	ebp,esp
 		push	dword[esp]
 		xchg	ebp,esp
 		ret
 
-w_over		dd	w_dup
+w_over:		dd	w_dup
 		dd	4
 		db	"over"
-xt_over		xchg	ebp,esp
+xt_over:	xchg	ebp,esp
 		pop	eax
 		pop	ebx
 		push	ebx
@@ -423,37 +449,37 @@ xt_over		xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_key		dd	w_over
+w_key:		dd	w_over
 		dd	3
 		db	"key"
-xt_key		mov	eax,[@_source_id]
+xt_key:		mov	eax,[@_source_id]
 		call	readc
 		xchg	ebp,esp
 		push	eax
 		xchg	ebp,esp
 		ret
 
-w_emit		dd	w_key
+w_emit:		dd	w_key
 		dd	4
 		db	"emit"
-xt_emit		xchg	ebp,esp
+xt_emit:	xchg	ebp,esp
 		pop	eax
 		call	putc
 		xchg	ebp,esp
 		ret
 
-accept_a	dd	1
-accept_n	dd	1
-accept_c	dd	1
+accept_a:	dd	1
+accept_n:	dd	1
+accept_c:	dd	1
 
-w_accept	dd	w_emit
+w_accept:	dd	w_emit
 		dd	6
 		db	"accept"
-xt_accept	xchg	ebp,esp
+xt_accept:	xchg	ebp,esp
 		pop	dword[accept_n]
 		pop	dword[accept_a]
 		mov	dword[accept_c],0
-xt_accept1	mov	eax,[accept_c]
+xt_accept1:	mov	eax,[accept_c]
 		cmp	eax,[accept_n]
 		jz	xt_accept_e
 		mov	eax,[@_source_id]
@@ -472,7 +498,7 @@ xt_accept1	mov	eax,[accept_c]
 		inc	dword[accept_a]
 		inc	dword[accept_c]
 		jmp	xt_accept1
-xt_accept_bs	cmp	dword[accept_c],0
+xt_accept_bs:	cmp	dword[accept_c],0
 		jz	xt_accept1
 		mov	eax,8
 		call	putc
@@ -483,16 +509,16 @@ xt_accept_bs	cmp	dword[accept_c],0
 		dec	dword[accept_a]
 		dec	dword[accept_c]
 		jmp	xt_accept1
-xt_accept_e	push	dword[accept_c]
+xt_accept_e:	push	dword[accept_c]
 		xchg	ebp,esp
 		mov	eax,32
 		call	putc
 		ret
 
-w_refill	dd	w_accept
+w_refill:	dd	w_accept
 		dd	6
 		db	"refill"
-xt_refill	call	xt_tib
+xt_refill:	call	xt_tib
 		call	xt_max_num_tib
 		call	xt_accept
 		call	xt_num_tib
@@ -506,14 +532,14 @@ xt_refill	call	xt_tib
 		xchg	ebp,esp
 		ret
 
-tonumber_u	resd	1
-tonumber_sum	resd	1
-tonumber_sign	resd	1
+tonumber_u:	resd	1
+tonumber_sum:	resd	1
+tonumber_sign:	resd	1
 
-w_tonumber	dd	w_refill
+w_tonumber:	dd	w_refill
 		dd	7
 		db	">number"
-xt_tonumber	xchg	ebp,esp
+xt_tonumber:	xchg	ebp,esp
 		pop	ebx
 		pop	eax
 		xchg	ebp,esp
@@ -647,14 +673,13 @@ xt_colon:	call	xt_parse_name
 w_semicolon:	dd	w_colon
 		dd	1 + m_immediate
 		db	";"
-xt_semicolon:	mov	eax,[@_last]
-		call	nfa
-		mov	eax,0xc3
+xt_semicolon:	mov	eax,0xc3
 		call	c_comma		; compile near return
 		mov	dword[@_state],0
 		ret
 
-w_compile_comma	dd	w_semicolon
+w_compile_comma:
+		dd	w_semicolon
 		dd	8
 		db	"compile,"
 xt_compile_comma:
@@ -674,7 +699,7 @@ compare_n:	resd	1
 compare_b:	resd	1
 compare_u:	resd	1
 
-w_compare	dd	w_compile_comma
+w_compare:	dd	w_compile_comma
 		dd	7
 		db	"compare"
 		xchg	ebp,esp
@@ -721,14 +746,14 @@ compare1:	mov	ecx,0		; clear found flag
 compare_e:	mov	eax,ecx
 		ret
 
-find_str	resd	1
-find_u		resd	1
-find_curlink	resd	1
+find_str:	resd	1
+find_u:		resd	1
+find_curlink:	resd	1
 
-w_find		dd	w_compare
+w_find:		dd	w_compare
 		dd	4
 		db	"find"
-xt_find		xchg	ebp,esp
+xt_find:	xchg	ebp,esp
 		pop	ebx
 		pop	eax
 		xchg	ebp,esp
@@ -767,10 +792,10 @@ find_e:		mov	eax,0
 		ret
 
 ; ( char "ccc<char>" -- c-addr u )
-w_parse		dd	w_find
+w_parse:	dd	w_find
 		dd	5
 		db	"parse"
-xt_parse	mov	eax,[@_tib]
+xt_parse:	mov	eax,[@_tib]
 		mov	edx,eax
 		inc	dword[@_to_in]	; skip current character
 		add	eax,[@_to_in]
@@ -798,10 +823,10 @@ _parse1:	mov	edx,eax
 
 ; ( "<spaces>name<space>" -- c-addr u)
 ; FIXME, can use PARSE?
-w_parse_name	dd	w_parse
+w_parse_name:	dd	w_parse
 		dd	10
 		db	"parse-name"
-xt_parse_name	mov	eax,[@_tib]
+xt_parse_name:	mov	eax,[@_tib]
 		mov	edx,eax
 		add	eax,[@_to_in]
 		add	edx,[@_num_tib]	; end c-addr
@@ -845,10 +870,10 @@ xt_nfa:		xchg	ebp,esp
 nfa:		add	eax,4
 		ret
 
-w_cfa		dd	w_nfa
+w_cfa:		dd	w_nfa
 		dd	3
 		db	"cfa"
-x_cfa		xchg	ebp,esp
+xt_cfa:		xchg	ebp,esp
 		pop	eax
 		xchg	ebp,esp
 		call	cfa
@@ -865,7 +890,7 @@ cfa:		call	nfa
 		add	eax,ebx
 		ret
 
-w_sp_fetch	dd	w_cfa
+w_sp_fetch:	dd	w_cfa
 		dd	3
 		db	"sp@"
 xt_sp_fetch:	xchg	ebp,esp
@@ -873,7 +898,7 @@ xt_sp_fetch:	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_sp_store	dd	w_sp_fetch
+w_sp_store:	dd	w_sp_fetch
 		dd	3
 		db	"sp!"
 xt_sp_store:	xchg	ebp,esp
@@ -882,7 +907,7 @@ xt_sp_store:	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_rp_fetch	dd	w_sp_store
+w_rp_fetch:	dd	w_sp_store
 		dd	3
 		db	"rp@"
 xt_rp_fetch:	xchg	ebp,esp
@@ -890,7 +915,7 @@ xt_rp_fetch:	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_rp_store	dd	w_rp_fetch
+w_rp_store:	dd	w_rp_fetch
 		dd	3
 		db	"rp!"
 xt_rp_store:	xchg	ebp,esp
@@ -901,7 +926,7 @@ xt_rp_store:	xchg	ebp,esp
 
 ; Consider getting rid of open-file and close-file and use blocks instead
 ; ( c-addr u fam -- fileid ior )
-w_open_file	dd	w_rp_store
+w_open_file:	dd	w_rp_store
 		dd	9
 		db	"open-file"
 xt_open_file:	xchg	ebp,esp
@@ -926,7 +951,7 @@ open_error:	xchg	ebp,esp
 		ret
 
 ; ( fileid -- ior )
-w_close_file	dd	w_open_file
+w_close_file:	dd	w_open_file
 		dd	10
 		db	"close-file"
 xt_close_file:	xchg	ebp,esp
@@ -944,11 +969,16 @@ close_error:	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
+last		equ	w_close_file
+
 ; ====================================================================== ;
 ;			  Bootstrap Compiler
 ; ====================================================================== ;
+;
 ; This part is a program that loads and compiles the rest of the Forth
-; in Forth from source file. It is a minimal Forth compiler.
+; in Forth from source file. It is a minimal Forth compiler and
+; interpreter
+;
 			    section .text
 
 filename:	db	"forth.fs",0
@@ -971,6 +1001,7 @@ puts:		mov	bl,byte[eax]	; caddr --
 		jmp	puts
 puts_e:		ret
 
+; Display counter string
 puts1:		test	ebx,ebx		; c-addr u --
 		jz	puts1_e
 		push	eax
@@ -1169,7 +1200,7 @@ readc:		call	sys_readc
 open_error$:	db	"Failed to open file",0
 
 ; --
-boot:		mov	dword[@_last],w_close_file
+boot:		mov	dword[@_last],last
 
 		call	initterm
 
@@ -1205,6 +1236,7 @@ boot1:
 ; ====================================================================== ;
 ;		     Linux specific system calls
 ; ====================================================================== ;
+
 %ifidn __OUTPUT_FORMAT__, elf32
 termios:	resd	36
 
@@ -1274,6 +1306,10 @@ sys_readc:	mov	ebx,eax		; fd -- c flag
 		mov	al,byte[sys_readc_buf]
 		ret
 
-%elifidn __OUTPUT_FORMAT__, win32
+%elifidn __OUTPUT_FORMAT__, bin
+
+; ====================================================================== ;
+;			       PC boot
+; ====================================================================== ;
 
 %endif

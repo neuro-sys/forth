@@ -12,6 +12,11 @@ decimal
 : compile-only #compile-only mask! ;
 
 : 2drop drop drop ;
+: / um/mod swap drop ;
+: * um* swap drop ;
+: mod um/mod drop ;
+
+: tuck dup rot swap ;
 
 : ) 41 ;
 : ( ) parse 2drop ; immediate
@@ -26,6 +31,9 @@ decimal
 
 : literal compile (lit) , ; immediate
 : ['] ' literal ;
+
+: [ -1 state ! ; immediate
+: ] 0 state ! ; immediate
 
 : here dp @ ;
 : cells cell * ;
@@ -42,13 +50,16 @@ decimal
 
 : clearstack s0 + sp! ;
 
-: < - 0 0< ;
+: exit r> drop ;
+: 2dup over over ;
+
+: < 2dup xor 0< if drop 0< exit then - 0< ;
 : > < invert ;
 
 : 1+ 1 + ;
 : 1- 1 - ;
-
-: exit r> drop ;
+: 2+ 2 + ;
+: 2- 2 - ;
 
 : = xor if 0 exit then -1 ;
 : <> = invert ;
@@ -59,7 +70,6 @@ decimal
 : +! dup @ rot + swap ! ;
 
 : -rot rot rot ;
-: 2dup over over ;
 : 0= 0 = ;
 : nip swap drop ;
 
@@ -97,17 +107,13 @@ decimal
 : !" dup , dup >r here swap cmove r> allot ;
 : ." [char] " parse state @ if compile (.") !" else type then ; immediate
 
-: / um/mod swap drop ;
-: mod um/mod drop ;
-
-: tuck dup rot swap ;
-
 : pad here 80 + ;
 variable hld
 
+: extract um/mod swap 9 over < 7 and + [char] 0 + ;
 : <# pad hld ! ;
 : hold ( c -- ) hld @ 1 - dup hld ! c! ;
-: # ( u -- u ) base @ um/mod swap [char] 0 + hold ;
+: # ( u -- u ) base @ extract hold ;
 : #s ( u -- 0 ) begin # dup while repeat ;
 : #> drop hld @ pad over - ;
 : sign 0< if [char] - hold then ;
@@ -152,13 +158,12 @@ variable hld
 : 2>r compile >r compile >r ; immediate
 : 2r> compile r> compile r> ; immediate
 
+variable (do-nest)
 variable (i)
-
 : i (i) @ ;
 
 : (do) dup (i) ! 2dup r> -rot 2>r >r <> ;
 : (loop) r> 2r> 1+ rot >r ;
-
 : unloop r> 2r> 2drop >r ;
 
 : do here
@@ -171,13 +176,6 @@ variable (i)
        here swap !
        compile unloop ; immediate
 
-: test
-  42
-  3 0 do
-    3 0 do
-      cr ." Hello: " i . dup .
-    loop
-  loop drop
-;
-
-test
+cr ."                    ********** emFORTH 1.0 **********"
+cr ."                              COPYRIGHT 1986"
+cr ."                      ANS FORTH BY FIRAT SALGUR"
