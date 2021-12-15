@@ -41,7 +41,7 @@
 ; Change Log
 ; ==========
 ; 20211215 - Change log added, code formatted, todo added.
-;
+; 20211215 - Added ACCEPT in Forth
 
 
 			    global _start
