@@ -144,7 +144,9 @@ variable hld
 
 : .s
   cr
-  depth
+  depth [char] <   emit
+    dup [char] 0 + emit
+        [char] >   emit
   begin
     dup
   while
@@ -175,6 +177,26 @@ variable (i)
        compile (branch) ,
        here swap !
        compile unloop ; immediate
+
+: backspace 8 emit 32 emit 8 emit ;
+
+: accept ( addr n -- n )
+  2dup
+  begin
+    key dup  10 <>
+        over 13 <> and
+        over       and
+  while
+    dup 127 = if drop backspace
+                 swap 1- swap 1+
+              else
+                rot 2dup c! -rot emit
+                swap 1+ swap 1-
+              then
+  repeat drop
+  drop swap drop swap -
+;
+
 
 cr ."                    ********** emFORTH 1.0 **********"
 cr ."                              COPYRIGHT 1986"

@@ -379,7 +379,28 @@ xt_xor:		xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_invert:	dd	w_xor
+w_equals:	dd	w_xor
+		dd	1
+		db	"="
+xt_equals:	xchg	ebp,esp
+		pop	eax
+		pop	ebx
+		cmp	eax,ebx
+		jz	xt_equals1
+		push	0
+		jmp	xt_equals2
+xt_equals1:	push	-1
+xt_equals2:	xchg	ebp,esp
+		ret
+
+w_notequals:	dd	w_equals
+		dd	2
+		db	"<>"
+xt_notequals:	call	xt_equals
+		call	xt_invert
+		ret
+
+w_invert:	dd	w_notequals
 		dd	6
 		db	"invert"
 xt_invert:	call	xt_dolit
@@ -453,7 +474,7 @@ w_key:		dd	w_over
 		dd	3
 		db	"key"
 xt_key:		mov	eax,[@_source_id]
-		call	readc
+		call	sys_readc
 		xchg	ebp,esp
 		push	eax
 		xchg	ebp,esp
@@ -468,51 +489,77 @@ xt_emit:	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-accept_a:	dd	1
-accept_n:	dd	1
-accept_c:	dd	1
+w_2dup:		dd	w_emit
+		dd	4
+		db	"2dup"
+xt_2dup:	call	xt_over
+		call	xt_over
+		ret
 
-w_accept:	dd	w_emit
+w_dash_rot:	dd	w_2dup
+		dd	4
+		db	"-rot"
+xt_dash_rot:	call	xt_rot
+		call	xt_rot
+		ret
+
+w_accept:	dd	w_dash_rot
 		dd	6
 		db	"accept"
-xt_accept:	xchg	ebp,esp
-		pop	dword[accept_n]
-		pop	dword[accept_a]
-		mov	dword[accept_c],0
-xt_accept1:	mov	eax,[accept_c]
-		cmp	eax,[accept_n]
-		jz	xt_accept_e
-		mov	eax,[@_source_id]
-		call	readc
-		test	ebx,ebx		; eof
-		jz	xt_accept_e
-		cmp	al,10		; newline
-		jz	xt_accept_e
-		cmp	al,13		; newline
-		jz	xt_accept_e
-		cmp	al,127		; bs
-		jz	xt_accept_bs
-		mov	ebx,[accept_a]
-		mov	byte[ebx],al
-		call	putc
-		inc	dword[accept_a]
-		inc	dword[accept_c]
-		jmp	xt_accept1
-xt_accept_bs:	cmp	dword[accept_c],0
-		jz	xt_accept1
-		mov	eax,8
-		call	putc
-		mov	eax,32
-		call	putc
-		mov	eax,8
-		call	putc
-		dec	dword[accept_a]
-		dec	dword[accept_c]
-		jmp	xt_accept1
-xt_accept_e:	push	dword[accept_c]
-		xchg	ebp,esp
-		mov	eax,32
-		call	putc
+xt_accept:	call	xt_2dup
+xt_accept1:	call	xt_key
+		call	xt_dup
+		call	xt_dolit
+		dd	10
+		call	xt_notequals
+		call	xt_over
+		call	xt_dolit
+		dd	13
+		call	xt_notequals
+		call	xt_and
+		call	xt_over
+		call	xt_and
+		call	xt_0branch
+		dd	xt_accept2
+		call	xt_dup
+		call	xt_dolit
+		dd	127
+		call	xt_equals
+		call	xt_0branch
+		dd	xt_accept3
+		call	xt_drop
+; backspace handling can be removed when the outer interpreter
+; is compiled via source
+		; call	xt_backspace
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_minus
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		jmp	xt_accept4
+xt_accept3:	call	xt_rot
+		call	xt_2dup
+		call	xt_cstore
+		call	xt_dash_rot
+		call	xt_emit
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_minus
+xt_accept4:	jmp	xt_accept1
+xt_accept2:	call	xt_drop
+		call	xt_drop
+		call	xt_swap
+		call	xt_drop
+		call	xt_swap
+		call	xt_minus
 		ret
 
 w_refill:	dd	w_accept
@@ -527,9 +574,8 @@ xt_refill:	call	xt_tib
 		dd	0
 		call	xt_to_in
 		call	xt_store
-		xchg	ebp,esp
-		push	dword 0
-		xchg	ebp,esp
+		call	xt_dolit
+		dd	0
 		ret
 
 tonumber_u:	resd	1
@@ -1029,7 +1075,7 @@ readline1:	mov	eax,[@_num_tib]
 		cmp	eax,TIB_SIZ
 		jz	readline_e
 		mov	eax,[@_source_id]
-		call	readc
+		call	sys_readc
 		cmp	ebx,-1
 		jz	readline_error
 		test	ebx,ebx
@@ -1190,19 +1236,12 @@ quit_end:	mov	eax,quit_error$
 		call	puts
 		ret
 
-; Read one byte character into buffer from fd
-; when flag is 0, end of file, when -1, error, otherwize number of characters
-; read
-; fd -- c flag
-readc:		call	sys_readc
-		ret
-
 open_error$:	db	"Failed to open file",0
 
 ; --
 boot:		mov	dword[@_last],last
 
-		call	initterm
+		call	sys_init
 
 		xchg	ebp,esp
 		push	filename
@@ -1260,7 +1299,7 @@ settermios:	mov	eax,54
 		int	0x80
 		ret
 
-initterm:	call	gettermios
+sys_init:	call	gettermios
 		and	dword[termios+12], ~(ECHO|ICANON)
 		call	settermios
 		ret
@@ -1296,6 +1335,10 @@ sys_close:	mov	ebx,eax		; fd --
 
 sys_readc_buf:	dd	1
 
+; Read one byte character into buffer from fd
+; when flag is 0, end of file, when -1, error, otherwize number of characters
+; read
+; fd -- c flag
 sys_readc:	mov	ebx,eax		; fd -- c flag
 		mov	ecx,sys_readc_buf
 		mov	eax,3		; read
@@ -1311,5 +1354,21 @@ sys_readc:	mov	ebx,eax		; fd -- c flag
 ; ====================================================================== ;
 ;			       PC boot
 ; ====================================================================== ;
+
+sys_init:	ret
+
+sys_bye:	ret
+
+sys_putc:
+		ret
+
+sys_open:
+		ret
+
+sys_close:
+		ret
+
+sys_readc:
+		ret
 
 %endif
