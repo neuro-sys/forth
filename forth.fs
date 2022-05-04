@@ -12,21 +12,25 @@ decimal
 : compile-only #compile-only mask! ;
 
 : 2drop drop drop ;
-: / um/mod swap drop ;
-: * um* swap drop ;
-: mod um/mod drop ;
-
 : tuck dup rot swap ;
 
 : ) 41 ;
 : ( ) parse 2drop ; immediate
 ( now we can write comments between parantheses )
 
+: / um/mod swap drop ;
+: * um* swap drop ;
+: mod um/mod drop ;
+
 : \ refill drop ;
 \ We can also do comments without enclosing token
 
 : ' parse-name find cfa ;
+
 : compile r> dup 1 + dup @ + cell + compile, cell 1 + + >r ;
+( note that this definition is specific to x86 far call )
+( it should be better abstracted away with a primitive word )
+
 : [compile] ' compile, ; immediate
 
 : literal compile (lit) , ; immediate
@@ -160,7 +164,6 @@ variable hld
 : 2>r compile >r compile >r ; immediate
 : 2r> compile r> compile r> ; immediate
 
-variable (do-nest)
 variable (i)
 : i (i) @ ;
 
@@ -198,6 +201,6 @@ variable (i)
 ;
 
 
-cr ."                    ********** emFORTH 1.0 **********"
+cr ."                       ********** FORTH **********"
 cr ."                              COPYRIGHT 1986"
-cr ."                      ANS FORTH BY FIRAT SALGUR"
+cr ."                      AN ANS FORTH BY FIRAT SALGUR"

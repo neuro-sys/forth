@@ -10,7 +10,7 @@
 ; ===========
 ; - It uses 8 character tab width.
 ; - Counted strings use 1 cell for the count
-; - There are no double numbers (probably not a good idea)
+; - There are no double numbers (probably not a good idea not to have them)
 ;
 ; Build
 ; =====
@@ -79,25 +79,60 @@ _start:
 		call	boot
 
 ; ====================================================================== ;
-;			      Primitives
+;				 EQU
 ; ====================================================================== ;
-; Dictionary entry structure looks like this:
-;
-; link		1 cell
-; count+masks	1 cell
-; name		N bytes
-; code		N bytes
-;
+
 
 m_immediate	equ	(1 << 31)
 m_compile_only	equ	(1 << 30)
 count_mask	equ	~(m_immediate + m_compile_only)
 
-w_cell:		dd	0		; link
-		dd	4		; count+masks
-		db	"cell"		; name
-xt_cell:	call	xt_doconst	; code
-@_cell:		dd	4		; parameter
+; ====================================================================== ;
+;			      Primitives
+; ====================================================================== ;
+; Dictionary entry structure looks like this:
+;
+; link		1 cell			; holds address of next word
+; count+masks	1 cell			; mask data + name string length
+; name		N bytes			; word name
+; code		N bytes			; machine code
+
+w_dovar:	dd	0
+		dd	5
+		db	"(var)"
+xt_dovar:	xchg	ebp,esp
+		mov	eax,[ebp]
+		push	eax
+		xchg	ebp,esp
+		add	esp,4
+		ret
+
+w_doconst:	dd	w_dovar
+		dd	7
+		db	"(const)"
+xt_doconst:	xchg	ebp,esp
+		mov	eax,[ebp]
+		mov	eax,[eax]
+		push	eax
+		xchg	ebp,esp
+		add	esp,4
+		ret
+
+w_dolit:	dd	w_doconst
+		dd	5
+		db	"(lit)"
+xt_dolit:	xchg	ebp,esp
+		mov	eax,[ebp]
+		push	dword[eax]
+		xchg	ebp,esp
+		add	dword[esp],4
+		ret
+
+w_cell:		dd	w_dolit
+		dd	4
+		db	"cell"
+xt_cell:	call	xt_doconst
+@_cell:		dd	4
 
 w_dp:		dd	w_cell
 		dd	2
@@ -167,38 +202,7 @@ w_tib:		dd	w_r0
 xt_tib:		call	xt_doconst
 @_tib:		dd	tib
 
-w_dovar:	dd	w_tib
-		dd	5
-		db	"(var)"
-xt_dovar:	xchg	ebp,esp
-		mov	eax,[ebp]
-		push	eax
-		xchg	ebp,esp
-		add	esp,4
-		ret
-
-w_doconst:	dd	w_dovar
-		dd	7
-		db	"(const)"
-xt_doconst:	xchg	ebp,esp
-		mov	eax,[ebp]
-		mov	eax,[eax]
-		push	eax
-		xchg	ebp,esp
-		add	esp,4
-		ret
-
-w_dolit:	dd	w_doconst
-		dd	5
-		db	"(lit)"
-xt_dolit:	xchg	ebp,esp
-		mov	eax,[ebp]
-		push	dword[eax]
-		xchg	ebp,esp
-		add	dword[esp],4
-		ret
-
-w_branch:	dd	w_dolit
+w_branch:	dd	w_tib
 		dd	8
 		db	"(branch)"
 xt_branch:	pop	eax
@@ -506,6 +510,22 @@ xt_dash_rot:	call	xt_rot
 w_accept:	dd	w_dash_rot
 		dd	6
 		db	"accept"
+; : accept ( addr n -- n )
+;   2dup
+;   begin
+;     key dup  10 <>
+;	  over 13 <> and
+;	  over	     and
+;   while
+;     dup 127 = if drop backspace
+;		   swap 1- swap 1+
+;		else
+;		  rot 2dup c! -rot emit
+;		  swap 1+ swap 1-
+;		then
+;   repeat drop
+;   drop swap drop swap -
+; ;
 xt_accept:	call	xt_2dup
 xt_accept1:	call	xt_key
 		call	xt_dup
@@ -1023,7 +1043,7 @@ last		equ	w_close_file
 ;
 ; This part is a program that loads and compiles the rest of the Forth
 ; in Forth from source file. It is a minimal Forth compiler and
-; interpreter
+; interpreter.
 ;
 			    section .text
 
@@ -1214,7 +1234,7 @@ quit_error$:	db	" Failed to read input",10,0
 
 quit_curhead:	resd	1
 
-; --
+; In forth quit is the entry point for the outer interpreter
 quit:
 quit_begin:	cmp	dword[@_source_id],0
 		jnz	quit_sprompt
