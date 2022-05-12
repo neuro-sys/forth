@@ -1,21 +1,19 @@
 ; ====================================================================== ;
-;			      ANS Forth
+;			 Minimal Forth System
 ; ====================================================================== ;
 ;
 ; Description
 ; ===========
-; This program creates a Forth system for intel x86 for Linux.
+; This program creates a Forth system for intel x86 computers.
 ;
-; Conventions
-; ===========
-; - It uses 8 character tab width.
+; Design
+; ======
+; - Subroutine threaded
 ; - Counted strings use 1 cell for the count
-; - There are no double numbers (probably not a good idea not to have them)
+; - No "double" numbers
 ;
 ; Build
 ; =====
-; A compile.sh script is provided. But here is an example:
-;
 ; nasm -f elf32		\
 ;      -w-zeroing	\
 ;      -F dwarf		\
@@ -507,7 +505,29 @@ xt_dash_rot:	call	xt_rot
 		call	xt_rot
 		ret
 
-w_accept:	dd	w_dash_rot
+w_here:		dd	w_dash_rot
+		dd	4
+		db	"here"
+xt_here:	call	xt_dp
+		call	xt_fetch
+		ret
+
+w_backspace:	dd	w_here
+		dd	8
+		db	"backspace"
+; : backspace 8 emit 32 emit 8 emit ;
+xt_backspace:	call	xt_dolit
+		dd	8
+		call	xt_emit
+		call	xt_dolit
+		dd	32
+		call	xt_emit
+		call	xt_dolit
+		dd	8
+		call	xt_emit
+		ret
+
+w_accept:	dd	w_backspace
 		dd	6
 		db	"accept"
 ; : accept ( addr n -- n )
@@ -550,7 +570,7 @@ xt_accept1:	call	xt_key
 		call	xt_drop
 ; backspace handling can be removed when the outer interpreter
 ; is compiled via source
-		; call	xt_backspace
+		call	xt_backspace
 		call	xt_swap
 		call	xt_dolit
 		dd	1
@@ -585,6 +605,7 @@ xt_accept2:	call	xt_drop
 w_refill:	dd	w_accept
 		dd	6
 		db	"refill"
+; : refill tib max#tib accept #tib ! 0 >in ! 0 ;
 xt_refill:	call	xt_tib
 		call	xt_max_num_tib
 		call	xt_accept
@@ -598,68 +619,112 @@ xt_refill:	call	xt_tib
 		dd	0
 		ret
 
-tonumber_u:	resd	1
-tonumber_sum:	resd	1
-tonumber_sign:	resd	1
-
 w_tonumber:	dd	w_refill
 		dd	7
 		db	">number"
-xt_tonumber:	xchg	ebp,esp
-		pop	ebx
-		pop	eax
-		xchg	ebp,esp
-		call	tonumber
-		xchg	ebp,esp
-		push	eax
-		push	ebx
-		xchg	ebp,esp
-		ret
-
-; c-addr u -- n flag
-tonumber:	cmp	byte[eax],'-'
-		jnz	tonumber1
-		mov	dword[tonumber_sign],1
-		inc	eax
-		dec	ebx
-		jmp	tonumber3
-tonumber1:	mov	dword[tonumber_sign],0
-tonumber3:	mov	ecx,ebx		; count
-		add	ebx,eax		; addr
-		dec	ebx
-		mov	dword[tonumber_u],1	; digit factor
-		mov	dword[tonumber_sum],0
-tonumber2:	xor	eax,eax
-		mov	al,byte[ebx]
-		cmp	al,'0'
-		jl	tonumber_err
-		cmp	al,'9'
-		jg	tonumber_hex
-		sub	al,'0'
-		jmp	tonumber4
-tonumber_hex:	and	al,~0x20
-		cmp	al,'A'
-		jl	tonumber_err
-		cmp	al,'F'
-		jg	tonumber_err
-		sub	al,55
-tonumber4:	mul	dword[tonumber_u]
-		add	dword[tonumber_sum],eax
-		mov	eax,dword[tonumber_u]
-		mul	dword[@_base]
-		mov	dword[tonumber_u],eax
-		dec	ebx
-		dec	ecx
-		cmp	ecx,0
-		jz	tonumber_e
-		jmp	tonumber2
-tonumber_err:	mov	ebx,0
-		ret
-tonumber_e:	mov	eax,dword[tonumber_sum]
-		cmp	dword[tonumber_sign],1
-		jnz	tonumber_e1
-		neg	eax
-tonumber_e1:	mov	ebx,-1
+; : to-number  ( c-addr1 u1 -- n flag )
+;   over c@ 45 =	  ( is minus sign? )
+;   if
+;     -1 -rot		  ( set sign flag )
+;     1- swap 1+ swap	  ( skip sign char )
+;   else
+;      1 -rot
+;   then		  ( sign string length )
+;   swap		  ( sign length string )
+;   0 >r		  ( sign length string ) ( R: 0 )
+;   begin
+;     dup c@		  ( sign length string c ) ( R: 0 )
+;     dup 64 - 0<
+;     if [char] 0 -
+;     else 32 or [char] a - 10 +
+;     then		  ( sign length string n ) ( R: 0 )
+;     r> base @ * + >r	  ( sign length string ) ( R: n1 )
+;     1+ swap 1- swap	  ( sign length-1 string+1 ) ( R: n1 )
+;     over 0=
+;   until
+;   2drop
+;   r> *
+; ;
+xt_tonumber:	call	xt_over
+		call	xt_cfetch
+		call	xt_dolit
+		dd	45
+		call	xt_equals	; over c@ 45 =
+		call	xt_0branch
+		dd	xt_tonumber2
+xt_tonumber1:	call	xt_dolit
+		dd	-1
+		call	xt_dash_rot	; -1 -rot
+		call	xt_dolit
+		dd	1
+		call	xt_minus
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_swap		; 1- swap 1+ swap
+		jmp	xt_tonumber3
+xt_tonumber2:	call	xt_dolit
+		dd	1
+		call	xt_dash_rot	; 1 -rot
+xt_tonumber3:	call	xt_swap		; swap
+		call	xt_dolit
+		dd	0
+		call	xt_to_r		; 0 >r
+xt_tonumber5:	call	xt_dup
+		call	xt_cfetch	; dup c@
+		call	xt_dup
+		call	xt_dolit
+		dd	64
+		call	xt_minus
+		call	xt_zero_less	; dup 64 - 0<
+		call	xt_0branch
+		dd	xt_tonumber6
+		call	xt_dolit
+		dd	48
+		call	xt_minus	; [char] 0 -
+		jmp	xt_tonumber7
+xt_tonumber6:
+		call	xt_dolit
+		dd	32
+		call	xt_or		; 32 or
+		call	xt_dolit
+		dd	97
+		call	xt_minus
+		call	xt_dolit
+		dd	10
+		call	xt_plus		; [char] a - 10 +
+xt_tonumber7:
+		call	xt_r_from
+		call	xt_base
+		call	xt_fetch
+		call	xt_um_star
+		call	xt_swap
+		call	xt_drop
+		call	xt_plus
+		call	xt_to_r
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_minus
+		call	xt_swap		; 1+ swap 1- swap
+		call	xt_over
+		call	xt_dolit
+		dd	0
+		call	xt_equals	; over 0 =
+		call	xt_0branch
+		dd	xt_tonumber5
+		call	xt_drop
+		call	xt_drop
+		call	xt_r_from
+		call	xt_um_star
+		call	xt_swap
+		call	xt_drop		; 2drop r> *
+		call	xt_dolit
+		dd	0
 		ret
 
 w_cmove:	dd	w_tonumber
@@ -685,9 +750,6 @@ w_comma:	dd	w_cmove
 xt_comma:	xchg	ebp,esp
 		pop	eax
 		xchg	ebp,esp
-		call	comma
-		ret
-; n --
 comma:		mov	ebx,[@_dp]
 		mov	[ebx],eax
 		add	dword[@_dp],4
@@ -699,8 +761,6 @@ w_c_comma:	dd	w_comma
 _c_comma:	xchg	ebp,esp
 		pop	eax
 		xchg	ebp,esp
-		call	c_comma
-		ret
 c_comma:	mov	ebx,[@_dp]
 		mov	byte[ebx],al
 		inc	dword[@_dp]
@@ -712,35 +772,46 @@ colon_n:	resd	1
 w_colon:	dd	w_c_comma
 		dd	1
 		db	":"
+; : : parse-name       ( c-addr n )
+;     dup rot swap     ( n caddr n )
+;     here	       ( save here )
+;     last @ ,	       ( store last word address )
+;     last !	       ( make the current addr last )
+;     dup ,	       ( save name count )
+;     here swap cmove  ( copy name )
+;     here + dp !      ( advance dp )
+;     -1 state !
+; ;
 xt_colon:	call	xt_parse_name
-		xchg	ebp,esp
-		pop	ebx
-		pop	eax
-		xchg	ebp,esp
-		mov	dword[colon_a],eax
-		mov	dword[colon_n],ebx
-		mov	eax,[@_dp]
-		push	eax		; here last @
-		mov	eax,[@_last]
-		call	comma		; ,
-		pop	eax
-		mov	[@_last],eax	; last !
-		mov	eax,[colon_n]
-		call	comma		; n ,
-		mov	eax,[colon_a]
-		mov	ebx,[@_dp]
-		mov	ecx,[colon_n]
-		call	cmove		; copy name
-		mov	eax,[colon_n]
-		add	dword[@_dp],eax
-		mov	dword[@_state],-1
+		call	xt_dup
+		call	xt_rot
+		call	xt_swap
+		call	xt_here
+		call	xt_last
+		call	xt_fetch
+		call	xt_comma
+		call	xt_last
+		call	xt_store
+		call	xt_dup
+		call	xt_comma
+		call	xt_here
+		call	xt_swap
+		call	xt_cmove
+		call	xt_here
+		call	xt_plus
+		call	xt_dp
+		call	xt_store
+		call	xt_dolit
+		dd	-1
+		call	xt_state
+		call	xt_store
 		ret
 
 w_semicolon:	dd	w_colon
 		dd	1 + m_immediate
 		db	";"
-xt_semicolon:	mov	eax,0xc3
-		call	c_comma		; compile near return
+xt_semicolon:	mov	eax,0xc3		; compile near return
+		call	c_comma
 		mov	dword[@_state],0
 		ret
 
@@ -920,7 +991,7 @@ _parse_name3:	mov	edx,eax
 		xchg	ebp,esp
 		ret
 
-w_nfa		dd	w_parse_name
+w_nfa:		dd	w_parse_name
 		dd	3
 		db	"nfa"
 xt_nfa:		xchg	ebp,esp
@@ -1133,7 +1204,7 @@ interpret:	call	xt_parse_name
 
 		call	find
 		or	eax,eax
-		jz	interpret_to_number
+		jz	interpret_to_tonumber
 
 		mov	[quit_curhead],eax
 
@@ -1162,17 +1233,26 @@ interpret_execute:
 
 		jmp	interpret
 
-interpret_to_number:
+interpret_to_tonumber:
 		mov	eax,[find_str]
 		mov	ebx,[find_u]
-		call	tonumber
-		cmp	ebx,-1
+		xchg	ebp,esp
+		push	eax
+		push	ebx
+		xchg	ebp,esp
+		call	xt_tonumber
+		xchg	ebp,esp
+		pop	ebx
+		pop	eax
+		xchg	ebp,esp
+		; call	tonumber
+		cmp	ebx,0
 		jnz	interpret_abort
 
 		push	eax		; save the number
 
 		cmp	dword[@_state],0
-		jz	interpret_number_execute
+		jz	interpret_tonumber_execute
 
 		call	xt_dolit
 		dd	xt_dolit
@@ -1183,7 +1263,7 @@ interpret_to_number:
 
 		jmp	interpret
 
-interpret_number_execute:
+interpret_tonumber_execute:
 
 		pop	eax
 		xchg	ebp,esp

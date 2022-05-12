@@ -183,6 +183,7 @@ variable (i)
 
 : backspace 8 emit 32 emit 8 emit ;
 
+
 : accept ( addr n -- n )
   2dup
   begin
@@ -200,7 +201,4 @@ variable (i)
   drop swap drop swap -
 ;
 
-
-cr ."                       ********** FORTH **********"
-cr ."                              COPYRIGHT 1986"
-cr ."                      AN ANS FORTH BY FIRAT SALGUR"
+cr ." DOFORTH 1986" cr
