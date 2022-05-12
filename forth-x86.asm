@@ -30,14 +30,20 @@
 ; TODO
 ; ====
 ; - Reduce the primitive words size
-; - Reduce the size of bootstrap compiler
+; - Convert the following words to hand-coded forth:
+;   - compare
+;   - find
+;   - parse
+;   - parse-name
+; - Consider using block words instead of open-file, etc.
+; - Implement rest of the CORE word set
 ; - Add Windows support
 ; - Add PC boot support
-; - Implement rest of the CORE word set
-; - Implement BLOCK word set
+; - Can we make it easy to convert to Z80? Meta primitives?
 ;
 ; Change Log
 ; ==========
+; 20220513 - Converted >tonumber to hand coded forth.
 ; 20211215 - Change log added, code formatted, todo added.
 ; 20211215 - Added ACCEPT in Forth
 
@@ -758,10 +764,10 @@ comma:		mov	ebx,[@_dp]
 w_c_comma:	dd	w_comma
 		dd	2
 		db	"c,"
-_c_comma:	xchg	ebp,esp
+xt_c_comma:	xchg	ebp,esp
 		pop	eax
 		xchg	ebp,esp
-c_comma:	mov	ebx,[@_dp]
+		mov	ebx,[@_dp]
 		mov	byte[ebx],al
 		inc	dword[@_dp]
 		ret
@@ -810,9 +816,13 @@ xt_colon:	call	xt_parse_name
 w_semicolon:	dd	w_colon
 		dd	1 + m_immediate
 		db	";"
-xt_semicolon:	mov	eax,0xc3		; compile near return
-		call	c_comma
-		mov	dword[@_state],0
+xt_semicolon:	call	xt_dolit
+		dd	0xc3		; compile near return
+		call	xt_c_comma
+		call	xt_dolit
+		dd	0
+		call	xt_state
+		call	xt_store
 		ret
 
 w_compile_comma:
@@ -822,7 +832,7 @@ w_compile_comma:
 xt_compile_comma:
 		call	xt_dolit
 		dd	0xe8
-		call	_c_comma
+		call	xt_c_comma
 		call	xt_dp
 		call	xt_fetch
 		call	xt_minus
