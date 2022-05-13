@@ -631,12 +631,12 @@ w_tonumber:	dd	w_refill
 ; : to-number  ( c-addr1 u1 -- n flag )
 ;   over c@ 45 =	  ( is minus sign? )
 ;   if
-;     -1 -rot		  ( set sign flag )
+;     -1		  ( set sign flag )
 ;     1- swap 1+ swap	  ( skip sign char )
 ;   else
-;      1 -rot
+;      1
 ;   then		  ( sign string length )
-;   swap		  ( sign length string )
+;   -rot swap		  ( sign length string )
 ;   0 >r		  ( sign length string ) ( R: 0 )
 ;   begin
 ;     dup c@		  ( sign length string c ) ( R: 0 )
@@ -660,7 +660,6 @@ xt_tonumber:	call	xt_over
 		dd	xt_tonumber2
 xt_tonumber1:	call	xt_dolit
 		dd	-1
-		call	xt_dash_rot	; -1 -rot
 		call	xt_dolit
 		dd	1
 		call	xt_minus
@@ -672,8 +671,8 @@ xt_tonumber1:	call	xt_dolit
 		jmp	xt_tonumber3
 xt_tonumber2:	call	xt_dolit
 		dd	1
-		call	xt_dash_rot	; 1 -rot
-xt_tonumber3:	call	xt_swap		; swap
+xt_tonumber3:	call	xt_dash_rot	; -rot
+		call	xt_swap		; swap
 		call	xt_dolit
 		dd	0
 		call	xt_to_r		; 0 >r
