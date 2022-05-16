@@ -201,4 +201,3 @@ variable (i)
   drop swap drop swap -
 ;
 
-cr ." DOFORTH 1986" cr

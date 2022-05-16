@@ -8,9 +8,10 @@
 ;
 ; Design
 ; ======
+; - Reasonably minimal machine dependent assembly code
 ; - Subroutine threaded
-; - Counted strings use 1 cell for the count
-; - No "double" numbers
+; - Counted strings use 1 cell for the count (TODO adapt to standard)
+; - No "double" numbers (TODO adapt to standard)
 ;
 ; Build
 ; =====
@@ -29,6 +30,7 @@
 ;
 ; TODO
 ; ====
+; - Fix the to-number bug: it has no error checking
 ; - Reduce the primitive words size
 ; - Convert the following words to hand-coded forth:
 ;   - compare
@@ -40,6 +42,7 @@
 ; - Add Windows support
 ; - Add PC boot support
 ; - Can we make it easy to convert to Z80? Meta primitives?
+; - Consider using hand-encoded machine code source code
 ;
 ; Change Log
 ; ==========
@@ -56,7 +59,7 @@
 ;				Memory					 ;
 ; ====================================================================== ;
 
-DIC_SIZ		equ	64*1024*1024 ; Dictionary area
+DIC_SIZ		equ	64*1024 ; Dictionary area
 TIB_SIZ		equ	1024	; Temporary input buffer
 
 dstack:		resd	1024	; Data stack
@@ -150,13 +153,7 @@ w_num_tib:	dd	w_dp
 xt_num_tib:	call	xt_dovar
 @_num_tib:	dd	0
 
-w_max_num_tib:	dd	w_num_tib
-		dd	7
-		db	"max#tib"
-xt_max_num_tib:	call	xt_doconst
-@_max_num_tib:	dd	TIB_SIZ
-
-w_to_in:	dd	w_max_num_tib
+w_to_in:	dd	w_num_tib
 		dd	3
 		db	">in"
 xt_to_in:	call	xt_dovar
@@ -430,7 +427,35 @@ xt_zero_less_e:	push	eax
 		xchg	ebp,esp
 		ret
 
-w_swap:		dd	w_zero_less
+w_less:		dd	w_zero_less
+		dd	4
+		db	"less"
+xt_less:	xchg	ebp,esp
+		pop	ebx
+		pop	eax
+		cmp	eax,ebx
+		jl	xt_less1
+		push	dword 0
+		jmp	xt_less2
+xt_less1:	push	dword -1
+xt_less2:	xchg	ebp,esp
+		ret
+
+w_more:		dd	w_less
+		dd	4
+		db	"more"
+xt_more:	xchg	ebp,esp
+		pop	ebx
+		pop	eax
+		cmp	eax,ebx
+		jg	xt_more1
+		push	dword 0
+		jmp	xt_more2
+xt_more1:	push	dword -1
+xt_more2:	xchg	ebp,esp
+		ret
+
+w_swap:		dd	w_more
 		dd	4
 		db	"swap"
 xt_swap:	mov	eax,[ebp]
@@ -497,7 +522,102 @@ xt_emit:	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-w_2dup:		dd	w_emit
+w_comma:	dd	w_emit
+		dd	1
+		db	","
+xt_comma:	xchg	ebp,esp
+		pop	eax
+		xchg	ebp,esp
+comma:		mov	ebx,[@_dp]
+		mov	[ebx],eax
+		add	dword[@_dp],4
+		ret
+
+w_c_comma:	dd	w_comma
+		dd	2
+		db	"c,"
+xt_c_comma:	xchg	ebp,esp
+		pop	eax
+		xchg	ebp,esp
+		mov	ebx,[@_dp]
+		mov	byte[ebx],al
+		inc	dword[@_dp]
+		ret
+
+w_nfa:		dd	w_c_comma
+		dd	3
+		db	"nfa"
+xt_nfa:		xchg	ebp,esp
+		pop	eax
+		xchg	ebp,esp
+		call	nfa
+		xchg	ebp,esp
+		push	eax
+		xchg	ebp,esp
+		ret
+
+nfa:		add	eax,4
+		ret
+
+w_cfa:		dd	w_nfa
+		dd	3
+		db	"cfa"
+xt_cfa:		xchg	ebp,esp
+		pop	eax
+		xchg	ebp,esp
+		call	cfa
+		xchg	ebp,esp
+		push	eax
+		xchg	ebp,esp
+		ret
+
+; addr -- addr
+cfa:		call	nfa
+		mov	ebx,[eax]
+		and	ebx,count_mask
+		add	eax,4
+		add	eax,ebx
+		ret
+
+w_sp_fetch:	dd	w_cfa
+		dd	3
+		db	"sp@"
+xt_sp_fetch:	xchg	ebp,esp
+		push	esp
+		xchg	ebp,esp
+		ret
+
+w_sp_store:	dd	w_sp_fetch
+		dd	3
+		db	"sp!"
+xt_sp_store:	xchg	ebp,esp
+		pop	eax
+		mov	esp,eax
+		xchg	ebp,esp
+		ret
+
+w_rp_fetch:	dd	w_sp_store
+		dd	3
+		db	"rp@"
+xt_rp_fetch:	xchg	ebp,esp
+		push	ebp
+		xchg	ebp,esp
+		ret
+
+w_rp_store:	dd	w_rp_fetch
+		dd	3
+		db	"rp!"
+xt_rp_store:	xchg	ebp,esp
+		pop	eax
+		mov	ebp,eax
+		xchg	ebp,esp
+		ret
+
+; ====================================================================== ;
+;			Hand coded Forth words
+; ====================================================================== ;
+
+w_2dup:		dd	w_rp_store
 		dd	4
 		db	"2dup"
 xt_2dup:	call	xt_over
@@ -611,9 +731,10 @@ xt_accept2:	call	xt_drop
 w_refill:	dd	w_accept
 		dd	6
 		db	"refill"
-; : refill tib max#tib accept #tib ! 0 >in ! 0 ;
+; : refill tib 80 accept #tib ! 0 >in ! 0 ;
 xt_refill:	call	xt_tib
-		call	xt_max_num_tib
+		call	xt_dolit
+		dd	80
 		call	xt_accept
 		call	xt_num_tib
 		call	xt_store
@@ -622,34 +743,69 @@ xt_refill:	call	xt_tib
 		call	xt_to_in
 		call	xt_store
 		call	xt_dolit
-		dd	0
+		dd	-1
 		ret
 
-w_tonumber:	dd	w_refill
+w_less_or_equal:
+		dd	w_refill
+		dd	2
+		db	"<="
+xt_less_or_equal:
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_minus
+		call	xt_swap
+		call	xt_less
+		ret
+
+w_more_or_equal:
+		dd	w_less_or_equal
+		dd	2
+		db	">="
+xt_more_or_equal:
+		call	xt_dolit
+		dd	1
+		call	xt_minus
+		call	xt_more
+		ret
+
+w_between:	dd	w_more_or_equal
+		dd	7
+		db	"between"
+; : between rot swap over >= -rot <= and ;
+xt_between:     call 	xt_rot
+		call	xt_swap
+		call	xt_over
+		call	xt_more_or_equal
+		call	xt_dash_rot
+		call	xt_less_or_equal
+		call	xt_and
+		ret
+
+w_tonumber:	dd	w_between
 		dd	7
 		db	">number"
 ; : to-number  ( c-addr1 u1 -- n flag )
-;   over c@ 45 =	  ( is minus sign? )
-;   if
-;     -1		  ( set sign flag )
-;     1- swap 1+ swap	  ( skip sign char )
-;   else
-;      1
-;   then		  ( sign string length )
-;   -rot swap		  ( sign length string )
-;   0 >r		  ( sign length string ) ( R: 0 )
+;   over c@ 45 =          ( is minus sign? )
+;   if -1 -rot ( sign ) 1- swap 1+ swap ( skip sign char )
+;   else 1 -rot ( sign ) then  ( sign string length )
+;   swap                  ( sign length string )
+;   0 >r                  ( sign length string ) ( R: 0 )
 ;   begin
-;     dup c@		  ( sign length string c ) ( R: 0 )
-;     dup 64 - 0<
-;     if [char] 0 -
-;     else 32 or [char] a - 10 +
-;     then		  ( sign length string n ) ( R: 0 )
-;     r> base @ * + >r	  ( sign length string ) ( R: n1 )
-;     1+ swap 1- swap	  ( sign length-1 string+1 ) ( R: n1 )
+;     dup c@              ( sign length string c ) ( R: 0 )
+;     dup 48 57 between             if
+;     [char] 0 -                    else
+;     32 or dup 98 102 between      if
+;     [char] a - 10 +               else
+;     rdrop 2drop 2drop false exit  then then
+;                         ( sign length string n ) ( R: 0 )
+;     r> mybase @ * + >r  ( sign length string ) ( R: n1 )
+;     1+ swap 1- swap     ( sign length-1 string+1 ) ( R: n1 )
 ;     over 0=
 ;   until
 ;   2drop
-;   r> *
+;   r> * true
 ; ;
 xt_tonumber:	call	xt_over
 		call	xt_cfetch
@@ -660,6 +816,7 @@ xt_tonumber:	call	xt_over
 		dd	xt_tonumber2
 xt_tonumber1:	call	xt_dolit
 		dd	-1
+		call	xt_dash_rot
 		call	xt_dolit
 		dd	1
 		call	xt_minus
@@ -671,8 +828,8 @@ xt_tonumber1:	call	xt_dolit
 		jmp	xt_tonumber3
 xt_tonumber2:	call	xt_dolit
 		dd	1
-xt_tonumber3:	call	xt_dash_rot	; -rot
-		call	xt_swap		; swap
+		call	xt_dash_rot
+xt_tonumber3:	call	xt_swap		; swap
 		call	xt_dolit
 		dd	0
 		call	xt_to_r		; 0 >r
@@ -680,27 +837,44 @@ xt_tonumber5:	call	xt_dup
 		call	xt_cfetch	; dup c@
 		call	xt_dup
 		call	xt_dolit
-		dd	64
-		call	xt_minus
-		call	xt_zero_less	; dup 64 - 0<
+		dd	'0'
+		call	xt_dolit
+		dd	'9'
+		call	xt_between
 		call	xt_0branch
 		dd	xt_tonumber6
 		call	xt_dolit
-		dd	48
+		dd	'0'
 		call	xt_minus	; [char] 0 -
-		jmp	xt_tonumber7
-xt_tonumber6:
-		call	xt_dolit
+		jmp	xt_tonumber8
+xt_tonumber6:	call	xt_dolit
 		dd	32
 		call	xt_or		; 32 or
+		call	xt_dup
 		call	xt_dolit
-		dd	97
+		dd	'a'
+		call	xt_dolit
+		dd	'f'
+		call	xt_between
+		call	xt_0branch
+		dd	xt_tonumber7
+		call	xt_dolit
+		dd	'a'
 		call	xt_minus
 		call	xt_dolit
 		dd	10
 		call	xt_plus		; [char] a - 10 +
-xt_tonumber7:
-		call	xt_r_from
+		jmp	xt_tonumber8
+xt_tonumber7:	call	xt_r_from
+		call	xt_drop		; rdrop
+		call	xt_drop
+		call	xt_drop		; 2drop
+		call	xt_drop
+		call	xt_drop		; 2drop
+		call	xt_dolit
+		dd	0
+		ret
+xt_tonumber8:	call	xt_r_from
 		call	xt_base
 		call	xt_fetch
 		call	xt_um_star
@@ -729,7 +903,7 @@ xt_tonumber7:
 		call	xt_swap
 		call	xt_drop		; 2drop r> *
 		call	xt_dolit
-		dd	0
+		dd	-1
 		ret
 
 w_cmove:	dd	w_tonumber
@@ -740,41 +914,16 @@ xt_cmove:	xchg	ebp,esp
 		pop	ebx
 		pop	eax
 		xchg	ebp,esp
-		call	cmove
-		ret
-
-cmove:		mov	esi,eax
+		mov	esi,eax
 		mov	edi,ebx
 		cld
 		rep	movsb
 		ret
 
-w_comma:	dd	w_cmove
-		dd	1
-		db	","
-xt_comma:	xchg	ebp,esp
-		pop	eax
-		xchg	ebp,esp
-comma:		mov	ebx,[@_dp]
-		mov	[ebx],eax
-		add	dword[@_dp],4
-		ret
-
-w_c_comma:	dd	w_comma
-		dd	2
-		db	"c,"
-xt_c_comma:	xchg	ebp,esp
-		pop	eax
-		xchg	ebp,esp
-		mov	ebx,[@_dp]
-		mov	byte[ebx],al
-		inc	dword[@_dp]
-		ret
-
 colon_a:	resd	1
 colon_n:	resd	1
 
-w_colon:	dd	w_c_comma
+w_colon:	dd	w_cmove
 		dd	1
 		db	":"
 ; : : parse-name       ( c-addr n )
@@ -1000,79 +1149,10 @@ _parse_name3:	mov	edx,eax
 		xchg	ebp,esp
 		ret
 
-w_nfa:		dd	w_parse_name
-		dd	3
-		db	"nfa"
-xt_nfa:		xchg	ebp,esp
-		pop	eax
-		xchg	ebp,esp
-		call	nfa
-		xchg	ebp,esp
-		push	eax
-		xchg	ebp,esp
-		ret
-
-; addr -- addr
-nfa:		add	eax,4
-		ret
-
-w_cfa:		dd	w_nfa
-		dd	3
-		db	"cfa"
-xt_cfa:		xchg	ebp,esp
-		pop	eax
-		xchg	ebp,esp
-		call	cfa
-		xchg	ebp,esp
-		push	eax
-		xchg	ebp,esp
-		ret
-
-; addr -- addr
-cfa:		call	nfa
-		mov	ebx,[eax]
-		and	ebx,count_mask
-		add	eax,4
-		add	eax,ebx
-		ret
-
-w_sp_fetch:	dd	w_cfa
-		dd	3
-		db	"sp@"
-xt_sp_fetch:	xchg	ebp,esp
-		push	esp
-		xchg	ebp,esp
-		ret
-
-w_sp_store:	dd	w_sp_fetch
-		dd	3
-		db	"sp!"
-xt_sp_store:	xchg	ebp,esp
-		pop	eax
-		mov	esp,eax
-		xchg	ebp,esp
-		ret
-
-w_rp_fetch:	dd	w_sp_store
-		dd	3
-		db	"rp@"
-xt_rp_fetch:	xchg	ebp,esp
-		push	ebp
-		xchg	ebp,esp
-		ret
-
-w_rp_store:	dd	w_rp_fetch
-		dd	3
-		db	"rp!"
-xt_rp_store:	xchg	ebp,esp
-		pop	eax
-		mov	ebp,eax
-		xchg	ebp,esp
-		ret
 
 ; Consider getting rid of open-file and close-file and use blocks instead
 ; ( c-addr u fam -- fileid ior )
-w_open_file:	dd	w_rp_store
+w_open_file:	dd	w_parse_name
 		dd	9
 		db	"open-file"
 xt_open_file:	xchg	ebp,esp
@@ -1118,7 +1198,7 @@ close_error:	xchg	ebp,esp
 last		equ	w_close_file
 
 ; ====================================================================== ;
-;			  Bootstrap Compiler
+;			  Inner Interpreter
 ; ====================================================================== ;
 ;
 ; This part is a program that loads and compiles the rest of the Forth
@@ -1166,6 +1246,7 @@ readline_error_str:
 
 readline_buf:	resd	1
 
+; FIXME use ACCEPT?
 ; Read one line excluding the newline character at most size bytes
 ; into buffer from fd.
 readline:	mov	dword[readline_buf],tib	     ; -- u
@@ -1203,6 +1284,7 @@ readline_error: mov	eax,readline_error_str
 		call	puts
 		call	xt_bye
 
+; FIXME write in Forth
 interpret:	call	xt_parse_name
 		xchg	ebp,esp
 		pop	ebx
@@ -1254,9 +1336,8 @@ interpret_to_tonumber:
 		pop	ebx
 		pop	eax
 		xchg	ebp,esp
-		; call	tonumber
 		cmp	ebx,0
-		jnz	interpret_abort
+		jz	interpret_abort
 
 		push	eax		; save the number
 
@@ -1323,6 +1404,7 @@ quit_error$:	db	" Failed to read input",10,0
 
 quit_curhead:	resd	1
 
+; FIXME write in FORTH
 ; In forth quit is the entry point for the outer interpreter
 quit:
 quit_begin:	cmp	dword[@_source_id],0
@@ -1330,6 +1412,7 @@ quit_begin:	cmp	dword[@_source_id],0
 		mov	eax,quit_ok$
 		call	puts
 quit_sprompt:	call	xt_refill
+		call	xt_invert
 		call	xt_0branch
 		dd	quit1
 		jmp	quit_end
