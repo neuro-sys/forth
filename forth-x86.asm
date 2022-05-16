@@ -30,7 +30,6 @@
 ;
 ; TODO
 ; ====
-; - Fix the to-number bug: it has no error checking
 ; - Reduce the primitive words size
 ; - Convert the following words to hand-coded forth:
 ;   - compare
@@ -786,7 +785,7 @@ xt_between:     call 	xt_rot
 w_tonumber:	dd	w_between
 		dd	7
 		db	">number"
-; : to-number  ( c-addr1 u1 -- n flag )
+; : >number  ( c-addr1 u1 -- n flag )
 ;   over c@ 45 =          ( is minus sign? )
 ;   if -1 -rot ( sign ) 1- swap 1+ swap ( skip sign char )
 ;   else 1 -rot ( sign ) then  ( sign string length )
@@ -909,15 +908,44 @@ xt_tonumber8:	call	xt_r_from
 w_cmove:	dd	w_tonumber
 		dd	5
 		db	"cmove"
-xt_cmove:	xchg	ebp,esp
-		pop	ecx
-		pop	ebx
-		pop	eax
-		xchg	ebp,esp
-		mov	esi,eax
-		mov	edi,ebx
-		cld
-		rep	movsb
+; : cmove ( c-addr1 c-addr2 u -- )
+;   begin
+;     dup 0<>
+;   while
+;     -rot               ( u c-addr1 c-addr2 )
+;     over c@ over c!    ( copy a byte )
+;     1+ swap 1+ swap    ( increment src and dest )
+;     rot                ( c-addr1 c-addr2 u )
+;     1-                 ( decrement u )
+;   repeat 2drop drop
+; ;
+xt_cmove:	call	xt_dup
+		call	xt_dolit
+		dd	0
+		call	xt_notequals
+		call	xt_0branch
+		dd	xt_cmove2
+		call	xt_dash_rot
+		call	xt_over
+		call	xt_cfetch
+		call	xt_over
+		call	xt_cstore
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_swap
+		call	xt_rot
+		call	xt_dolit
+		dd	1
+		call	xt_minus
+		jmp	xt_cmove
+xt_cmove2:	call	xt_drop
+		call	xt_drop
+		call	xt_drop
 		ret
 
 colon_a:	resd	1
