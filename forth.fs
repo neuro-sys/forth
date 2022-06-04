@@ -201,3 +201,14 @@ variable (i)
   drop swap drop swap -
 ;
 
+: test
+  0
+  begin
+    dup 10 <
+  while
+    dup . cr
+    1+
+  repeat
+;
+
+test

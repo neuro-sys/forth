@@ -4,12 +4,14 @@
 ;
 ; Description
 ; ===========
-; This program creates a Forth system for intel x86 computers.
+; This program creates a Forth system for intel x86 computers. There
+; is quite a bit of condensed and distilled Forth wizardry here.
 ;
 ; Design
 ; ======
-; - Reasonably minimal machine dependent assembly code
-; - Subroutine threaded
+; - Reasonably minimal machine dependent assembly code for
+;   portability/performance balance
+; - Subroutine threaded for performance
 ; - Counted strings use 1 cell for the count (TODO adapt to standard)
 ; - No "double" numbers (TODO adapt to standard)
 ;
@@ -42,6 +44,11 @@
 ; - Add PC boot support
 ; - Can we make it easy to convert to Z80? Meta primitives?
 ; - Consider using hand-encoded machine code source code
+; - List reference books
+;   - A Problem Oriented Language
+;   - Threaded Interpreted Languages
+;   - Forth standards 79, 83, 94
+;   - Zen & eForth
 ;
 ; Change Log
 ; ==========
@@ -58,7 +65,7 @@
 ;				Memory					 ;
 ; ====================================================================== ;
 
-DIC_SIZ		equ	64*1024 ; Dictionary area
+DIC_SIZ		equ	65536	; Dictionary area
 TIB_SIZ		equ	1024	; Temporary input buffer
 
 dstack:		resd	1024	; Data stack
@@ -517,7 +524,7 @@ w_emit:		dd	w_key
 		db	"emit"
 xt_emit:	xchg	ebp,esp
 		pop	eax
-		call	putc
+		call	sys_putc
 		xchg	ebp,esp
 		ret
 
@@ -773,7 +780,7 @@ w_between:	dd	w_more_or_equal
 		dd	7
 		db	"between"
 ; : between rot swap over >= -rot <= and ;
-xt_between:     call 	xt_rot
+xt_between:	call	xt_rot
 		call	xt_swap
 		call	xt_over
 		call	xt_more_or_equal
@@ -786,21 +793,21 @@ w_tonumber:	dd	w_between
 		dd	7
 		db	">number"
 ; : >number  ( c-addr1 u1 -- n flag )
-;   over c@ 45 =          ( is minus sign? )
+;   over c@ 45 =	  ( is minus sign? )
 ;   if -1 -rot ( sign ) 1- swap 1+ swap ( skip sign char )
 ;   else 1 -rot ( sign ) then  ( sign string length )
-;   swap                  ( sign length string )
-;   0 >r                  ( sign length string ) ( R: 0 )
+;   swap		  ( sign length string )
+;   0 >r		  ( sign length string ) ( R: 0 )
 ;   begin
-;     dup c@              ( sign length string c ) ( R: 0 )
-;     dup 48 57 between             if
-;     [char] 0 -                    else
-;     32 or dup 98 102 between      if
-;     [char] a - 10 +               else
+;     dup c@		  ( sign length string c ) ( R: 0 )
+;     dup 48 57 between		    if
+;     [char] 0 -		    else
+;     32 or dup 98 102 between	    if
+;     [char] a - 10 +		    else
 ;     rdrop 2drop 2drop false exit  then then
-;                         ( sign length string n ) ( R: 0 )
+;			  ( sign length string n ) ( R: 0 )
 ;     r> mybase @ * + >r  ( sign length string ) ( R: n1 )
-;     1+ swap 1- swap     ( sign length-1 string+1 ) ( R: n1 )
+;     1+ swap 1- swap	  ( sign length-1 string+1 ) ( R: n1 )
 ;     over 0=
 ;   until
 ;   2drop
@@ -912,11 +919,11 @@ w_cmove:	dd	w_tonumber
 ;   begin
 ;     dup 0<>
 ;   while
-;     -rot               ( u c-addr1 c-addr2 )
-;     over c@ over c!    ( copy a byte )
-;     1+ swap 1+ swap    ( increment src and dest )
-;     rot                ( c-addr1 c-addr2 u )
-;     1-                 ( decrement u )
+;     -rot		 ( u c-addr1 c-addr2 )
+;     over c@ over c!	 ( copy a byte )
+;     1+ swap 1+ swap	 ( increment src and dest )
+;     rot		 ( c-addr1 c-addr2 u )
+;     1-		 ( decrement u )
 ;   repeat 2drop drop
 ; ;
 xt_cmove:	call	xt_dup
@@ -947,9 +954,6 @@ xt_cmove2:	call	xt_drop
 		call	xt_drop
 		call	xt_drop
 		ret
-
-colon_a:	resd	1
-colon_n:	resd	1
 
 w_colon:	dd	w_cmove
 		dd	1
@@ -1044,9 +1048,9 @@ compare:	mov	[compare_a],eax
 		mov	[compare_b],ecx
 		cmp	dword[compare_n],edx
 		jz	compare_s	; if counts not match
-		mov	eax,0		; return false
+		mov	eax,-1		; return false
 		ret
-compare_s:	mov	ecx,-1		; set found flag
+compare_s:	mov	ecx,0		; set found flag
 compare2:	xor	eax,eax
 		mov	al,[compare_n]
 		cmp	al,0
@@ -1065,7 +1069,7 @@ compare2:	xor	eax,eax
 		inc	dword[compare_b]
 		dec	dword[compare_n]
 		jmp	compare2
-compare1:	mov	ecx,0		; clear found flag
+compare1:	mov	ecx,-1		; clear found flag
 compare_e:	mov	eax,ecx
 		ret
 
@@ -1099,7 +1103,7 @@ find1:		mov	eax,[find_curlink]
 		mov	ecx,[find_str]
 		mov	edx,[find_u]
 		call	compare
-		cmp	eax,0
+		cmp	eax,-1
 		jz	find_n		; not found
 		mov	eax,[find_curlink]
 		call	nfa
@@ -1177,8 +1181,24 @@ _parse_name3:	mov	edx,eax
 		xchg	ebp,esp
 		ret
 
+last		equ	w_parse_name
+
+; ====================================================================== ;
+;			  Inner Interpreter
+; ====================================================================== ;
+;
+; This part is a program that loads and compiles the rest of the Forth
+; in Forth from source file. It is a minimal Forth compiler and
+; interpreter.
+;
+			    section .text
+
+filename:	db	"forth.fs",0
+filename_len:	equ	$-filename
 
 ; Consider getting rid of open-file and close-file and use blocks instead
+; Alternatively just embed the forth source into the memory image, and
+; do not read from disk at all
 ; ( c-addr u fam -- fileid ior )
 w_open_file:	dd	w_parse_name
 		dd	9
@@ -1223,24 +1243,6 @@ close_error:	xchg	ebp,esp
 		xchg	ebp,esp
 		ret
 
-last		equ	w_close_file
-
-; ====================================================================== ;
-;			  Inner Interpreter
-; ====================================================================== ;
-;
-; This part is a program that loads and compiles the rest of the Forth
-; in Forth from source file. It is a minimal Forth compiler and
-; interpreter.
-;
-			    section .text
-
-filename:	db	"forth.fs",0
-filename_len:	equ	$-filename
-
-putctemp:	resd	1
-putc:		call	sys_putc	; c --
-		ret
 
 ; Display zero terminated string
 puts:		mov	bl,byte[eax]	; caddr --
@@ -1249,7 +1251,7 @@ puts:		mov	bl,byte[eax]	; caddr --
 		push	eax
 		xor	eax,eax
 		mov	al,bl
-		call	putc
+		call	sys_putc
 		pop	eax
 		inc	eax
 		jmp	puts
@@ -1261,7 +1263,7 @@ puts1:		test	ebx,ebx		; c-addr u --
 		push	eax
 		push	ebx
 		mov	al,byte[eax]
-		call	putc
+		call	sys_putc
 		pop	ebx
 		pop	eax
 		inc	eax
@@ -1290,7 +1292,7 @@ readline1:	mov	eax,[@_num_tib]
 		test	ebx,ebx
 		jz	readline_eof
 		; push	eax
-		; call	putc
+		; call	sys_putc
 		; pop	eax
 		cmp	al,10		; new line
 		jz	readline_e
@@ -1395,7 +1397,7 @@ interpret_end:	ret
 
 interpret_abort:
 		mov	eax,10
-		call	putc
+		call	sys_putc
 		mov	eax,[find_str]
 		mov	ebx,[find_u]
 		call	puts1
@@ -1532,10 +1534,11 @@ sys_bye:
 		int	0x80
 
 ; IN eax: char
-sys_putc:	mov	[putctemp],eax
+sys_putctemp:	resd	1
+sys_putc:	mov	[sys_putctemp],eax
 		mov	eax,4		; write
 		mov	ebx,1		; stdout
-		mov	ecx,putctemp
+		mov	ecx,sys_putctemp
 		mov	edx,1		; 1 character
 		int	0x80
 		ret
