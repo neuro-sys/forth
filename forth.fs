@@ -1,81 +1,84 @@
-: hex     16 base ! ;
-: decimal 10 base ! ;
+: hex		16 base ! ;
+: decimal 	10 base ! ;
 
 hex
-: #immediate   80000000 ;
+: #immediate	80000000 ;
 : #compile-only 8000000 ;
-: #mask #immediate #compile-only or ;
+: #mask 	#immediate #compile-only or ;
 decimal
 
-: mask!        last @ nfa dup @ rot or swap ! ;
-: immediate    #immediate mask! ;
-: compile-only #compile-only mask! ;
+: mask!		last @ nfa dup @ rot or swap ! ;
+: immediate    	#immediate mask! ;
+: compile-only 	#compile-only mask! ;
 
-: 2drop drop drop ;
-: tuck dup rot swap ;
+: 2drop 	drop drop ;
+: tuck 		dup rot swap ;
 
-: ) 41 ;
-: ( ) parse 2drop ; immediate
+: ) 		41 ;
+: ( ) 		parse 2drop ; immediate
+
 ( now we can write comments between parantheses )
 
-: / um/mod swap drop ;
-: * um* swap drop ;
-: mod um/mod drop ;
+: /   	     	um/mod swap drop ;
+: * 		um* swap drop ;
+: mod 		um/mod drop ;
 
-: \ refill drop ;
+: \ 		refill drop ;
+
 \ We can also do comments without enclosing token
 
-: ' parse-name find cfa ;
+: '  	      	parse-name find cfa ;
 
-: compile r> dup 1 + dup @ + cell + compile, cell 1 + + >r ;
+: compile 	r> dup 1 + dup @ + cell + compile, cell 1 + + >r ;
+
 ( note that this definition is specific to x86 far call )
 ( it should be better abstracted away with a primitive word )
 
-: [compile] ' compile, ; immediate
+: [compile]     ' compile, ; immediate
 
-: literal compile (lit) , ; immediate
-: ['] ' literal ;
+: literal 	compile (lit) , ; immediate
+: ['] 		' literal ;
 
-: [ -1 state ! ; immediate
-: ] 0 state ! ; immediate
+: [ 		-1 state ! ; immediate
+: ] 		0 state ! ; immediate
 
-: here dp @ ;
-: cells cell * ;
+: here 		dp @ ;
+: cells 	cell * ;
 
-: if compile (0branch) here 0 , ; immediate
-: else compile (branch) here 0 , swap here swap ! ; immediate
-: then here swap ! ; immediate
+: if 		compile (0branch) here 0 , ; immediate
+: else 		compile (branch) here 0 , swap here swap ! ; immediate
+: then 		here swap ! ; immediate
 
-: begin here ; immediate
-: while [compile] if ; immediate
-: repeat compile (branch) swap , here swap ! ; immediate
-: again compile (branch) , ; immediate
-: until compile (0branch) , ; immediate
+: begin 	here ; immediate
+: while 	[compile] if ; immediate
+: repeat 	compile (branch) swap , here swap ! ; immediate
+: again 	compile (branch) , ; immediate
+: until 	compile (0branch) , ; immediate
 
-: clearstack s0 + sp! ;
+: clearstack 	s0 sp! ;
 
-: exit r> drop ;
-: 2dup over over ;
+: exit 		r> drop ;
+: 2dup 		over over ;
 
-: < 2dup xor 0< if drop 0< exit then - 0< ;
-: > < invert ;
+: < 		2dup xor 0< if drop 0< exit then - 0< ;
+: > 		< invert ;
 
-: 1+ 1 + ;
-: 1- 1 - ;
-: 2+ 2 + ;
-: 2- 2 - ;
+: 1+ 		1 + ;
+: 1- 		1 - ;
+: 2+ 		2 + ;
+: 2- 		2 - ;
 
-: = xor if 0 exit then -1 ;
-: <> = invert ;
+: = 		xor if 0 exit then -1 ;
+: <> 		= invert ;
 
-: 0<> 0 <> ;
-: 0> 0 > ;
+: 0<> 		0 <> ;
+: 0> 		0 > ;
 
-: +! dup @ rot + swap ! ;
+: +! 		dup @ rot + swap ! ;
 
-: -rot rot rot ;
-: 0= 0 = ;
-: nip swap drop ;
+: -rot 		rot rot ;
+: 0= 		0 = ;
+: nip 		swap drop ;
 
 : type ( caddr u -- )
   begin
@@ -86,54 +89,55 @@ decimal
   repeat 2drop
 ;
 
-: allot here + dp ! ;
+: allot		here + dp ! ;
 
-: create parse-name        ( parse next word )
-         here last @ ,     ( save last link here )
-         last !
-         dup ,             ( save name count )
-         dup >r
-         here swap cmove   ( save name )
-         r> allot
-         compile (var) ;
+: create 	parse-name        ( parse next word )
+         	here last @ ,     ( save last link here )
+         	last !
+         	dup ,             ( save name count )
+         	dup >r
+         	here swap cmove   ( save name )
+         	r> allot
+         	compile (var) ;
 
-: variable create 0 , ;
+: variable 	create 0 , ;
 
-: bl 32 ;
-: cr 10 emit ;
-: space bl emit ;
+: bl 		32 ;
+: cr 		10 emit ;
+: space 	bl emit ;
 
-: char bl parse drop c@ ;
-: [char] char [compile] literal ; immediate
+: char 		bl parse drop c@ ;
+: [char] 	char [compile] literal ; immediate
 
-: count dup cell + swap @ ;
-: (.") r> dup count type dup @ dup >r  + 4 + r> allot >r ;
-: !" dup , dup >r here swap cmove r> allot ;
-: ." [char] " parse state @ if compile (.") !" else type then ; immediate
+: count 	dup cell + swap @ ;
+: (.") 		r> dup count type dup @ dup >r  + 4 + r> allot >r ;
+: !" 		dup , dup >r here swap cmove r> allot ;
+: ." 		[char] " parse state @ if compile (.") !" else type then ; immediate
 
-: pad here 80 + ;
+: pad 		here 80 + ;
+
 variable hld
 
-: extract um/mod swap 9 over < 7 and + [char] 0 + ;
-: <# pad hld ! ;
+: extract 	um/mod swap 9 over < 7 and + [char] 0 + ;
+: <# 		pad hld ! ;
 : hold ( c -- ) hld @ 1 - dup hld ! c! ;
-: # ( u -- u ) base @ extract hold ;
+: # ( u -- u ) 	base @ extract hold ;
 : #s ( u -- 0 ) begin # dup while repeat ;
-: #> drop hld @ pad over - ;
-: sign 0< if [char] - hold then ;
+: #>   	      	drop hld @ pad over - ;
+: sign 	  	0< if [char] - hold then ;
 
-: u. <# #s #> space type ;
+: u. 		<# #s #> space type ;
 
-: negate invert 1 + ;
-: abs dup 0< if negate then ;
+: negate 	invert 1 + ;
+: abs 		dup 0< if negate then ;
 
-: +. dup >r abs <# #s r> sign #> ;
+: +. 		dup >r abs <# #s r> sign #> ;
 
-: . base @ 10 <>
-    if u. exit then
-    +. space type ;
+: . 		base @ 10 <>
+    		if u. exit then
+    		+. space type ;
 
-: depth s0 sp@ - 4 / ;
+: depth 	s0 sp@ - 4 / ;
 
 : words
   cr
@@ -161,28 +165,28 @@ variable hld
   repeat drop
 ;
 
-: 2>r compile >r compile >r ; immediate
-: 2r> compile r> compile r> ; immediate
+: 2>r		compile >r compile >r ; immediate
+: 2r> 		compile r> compile r> ; immediate
 
 variable (i)
-: i (i) @ ;
 
-: (do) dup (i) ! 2dup r> -rot 2>r >r <> ;
-: (loop) r> 2r> 1+ rot >r ;
-: unloop r> 2r> 2drop >r ;
+: i		(i) @ ;
 
-: do here
-     compile (do)
-     compile (0branch) here 0 , ; immediate
+: (do) 		dup (i) ! 2dup r> -rot 2>r >r <> ;
+: (loop) 	r> 2r> 1+ rot >r ;
+: unloop 	r> 2r> 2drop >r ;
 
-: loop swap
-       compile (loop)
-       compile (branch) ,
-       here swap !
-       compile unloop ; immediate
+: do 		here
+     		compile (do)
+     		compile (0branch) here 0 , ; immediate
 
-: backspace 8 emit 32 emit 8 emit ;
+: loop 		swap
+       		compile (loop)
+       		compile (branch) ,
+       		here swap !
+       		compile unloop ; immediate
 
+: backspace 	8 emit 32 emit 8 emit ;
 
 : accept ( addr n -- n )
   2dup
@@ -210,5 +214,3 @@ variable (i)
     1+
   repeat
 ;
-
-test
