@@ -7,7 +7,8 @@ hex
 : #mask                         #immediate #compile-only or ;
 decimal
 
-: mask!                         last @ nfa dup @ rot or swap ! ;
+: mask!                         last @ nfa dup @ rot or swap !
+                                ;
 : immediate                     #immediate mask! ;
 : compile-only                  #compile-only mask! ;
 
@@ -29,7 +30,8 @@ decimal
 
 : '             ( -- n )        parse-name find cfa ;
 
-: compile       ( -- )          r> dup 1 + dup @ + cell + compile, cell 1 + + >r ;
+: compile       ( -- )          r> dup 1 + dup @ + cell +
+                                compile, cell 1 + + >r ;
 
 \ note that this definition is specific to x86 far call
 
@@ -46,13 +48,16 @@ decimal
 : here          ( -- n )        dp @ ;
 : cells         ( n -- n )      cell * ;
 
-: if            ( n -- )        compile (0branch) here 0 , ; immediate
-: else          ( -- )          compile (branch) here 0 , swap here swap ! ; immediate
+: if            ( n -- )        compile (0branch) here 0 , ;
+                                immediate
+: else          ( -- )          compile (branch) here 0 , swap
+                                here swap ! ; immediate
 : then          ( -- )          here swap ! ; immediate
 
 : begin         ( -- )          here ; immediate
 : while         ( n -- )        [compile] if ; immediate
-: repeat        ( -- )          compile (branch) swap , here swap ! ; immediate
+: repeat        ( -- )          compile (branch) swap , here
+                                swap ! ; immediate
 : again         ( -- )          compile (branch) , ; immediate
 : until         ( n -- )        compile (0branch) , ; immediate
 
@@ -61,7 +66,8 @@ decimal
 : exit          ( -- )          r> drop ;
 : 2dup          ( a b -- a b a b ) over over ;
 
-: <             ( a b -- t )    2dup xor 0< if drop 0< exit then - 0< ;
+: <             ( a b -- t )    2dup xor 0< if drop 0< exit
+                                then - 0< ;
 : >             ( a b -- t )    < invert ;
 
 : 1+            ( a -- b )      1 + ;
@@ -109,18 +115,24 @@ decimal
 : space         ( -- )          bl emit ;
 
 : char          ( "<spaces>name" -- c ) bl parse drop c@ ;
-: [char]        ( "<spaces>name" -- ) char [compile] literal ; immediate
+: [char]        ( "<spaces>name" -- ) char [compile] literal ;
+                                immediate
 
 : count         ( addr -- addr n ) dup cell + swap @ ;
-: (.")                          r> dup count type dup @ dup >r  + 4 + r> allot >r ;
-: !"                            dup , dup >r here swap cmove r> allot ;
-: ."            ( "ccc<quote>" -- ) [char] " parse state @ if compile (.") !" else type then ; immediate
+: (.")                          r> dup count type dup @ dup >r
+                                + 4 + r> allot >r ;
+: !"                            dup , dup >r here swap cmove r>
+                                allot ;
+: ."            ( "ccc<quote>" -- ) [char] " parse state @ if
+                                compile (.") !" else type then ;
+                                immediate
 
 : pad           ( -- addr )     here 80 + ;
 
 variable hld
 
-: extract                       um/mod swap 9 over < 7 and + [char] 0 + ;
+: extract                       um/mod swap 9 over < 7 and +
+                                [char] 0 + ;
 : <#                            pad hld ! ;
 : hold          ( c -- )        hld @ 1 - dup hld ! c! ;
 : #             ( u -- u )      base @ extract hold ;
@@ -167,14 +179,17 @@ variable hld
   repeat drop
 ;
 
-: 2>r           ( a b -- ) ( R: -- a b ) compile >r compile >r ; immediate
-: 2r>           ( -- a b ) ( R: a b -- ) compile r> compile r> ; immediate
+: 2>r           ( a b -- ) ( R: -- a b ) compile >r compile >r
+                                         ; immediate
+: 2r>           ( -- a b ) ( R: a b -- ) compile r> compile r>
+                                         ; immediate
 
 variable (i)
 
 : i             ( -- n )        (i) @ ;
 
-: (do)                          dup (i) ! 2dup r> -rot 2>r >r <> ;
+: (do)                          dup (i) ! 2dup r> -rot 2>r >r
+                                <> ;
 : (loop)                        r> 2r> 1+ rot >r ;
 : unloop                        r> 2r> 2drop >r ;
 
