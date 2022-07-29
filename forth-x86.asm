@@ -52,6 +52,7 @@
 ;
 ; Change Log
 ; ==========
+; 20220729 - Add Win32 platform
 ; 20220513 - Converted >tonumber to hand coded forth.
 ; 20211215 - Change log added, code formatted, todo added.
 ; 20211215 - Added ACCEPT in Forth
