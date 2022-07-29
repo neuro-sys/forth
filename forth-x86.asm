@@ -1291,9 +1291,10 @@ readline1:	mov	eax,[@_num_tib]
 		jz	readline_error
 		test	ebx,ebx
 		jz	readline_eof
-		; push	eax
-		; call	sys_putc
-		; pop	eax
+; Echo the characters
+;		push	eax
+;		call	sys_putc
+;		pop	eax
 		cmp	al,10		; new line
 		jz	readline_e
 		cmp	al,13		; new line
@@ -1483,6 +1484,7 @@ boot1:
 		call	bootcompile
 
 		call	xt_source_id
+		call	xt_fetch	; Check if this breaks linux
 		call	xt_close_file
 		call	xt_drop
 
@@ -1592,6 +1594,89 @@ sys_close:
 		ret
 
 sys_readc:
+		ret
+
+; ====================================================================== ;
+;			       Win32
+; ====================================================================== ;
+
+%elifidn __OUTPUT_FORMAT__, win32
+extern		_printf
+extern		_putchar
+extern		_exit
+extern		_fopen
+extern		_fclose
+extern		_fgetc
+extern		_getchar
+
+STD_OUTPUT_HANDLE   equ -11
+STD_INPUT_HANDLE    equ -10
+
+extern		_ExitProcess@4, _GetStdHandle@4, _WriteConsoleA@20, _ReadConsoleInputA@16
+
+stdoutfd:	resd	1
+stdinfd:	resd	1
+
+sys_init:
+
+		push    STD_OUTPUT_HANDLE
+		call    _GetStdHandle@4
+		mov	[stdoutfd],eax
+
+		push    STD_INPUT_HANDLE
+		call    _GetStdHandle@4
+		mov	[stdinfd],eax
+
+		ret
+
+
+sys_bye:	push	dword 0
+		call	_ExitProcess@4
+		add	esp,4
+		ret
+
+sys_putcbuf:	resd	1
+sys_putcbuf2:	resd	4
+
+sys_putc:	mov	[sys_putcbuf],eax
+		push    0
+		push    sys_putcbuf2
+		push    1
+		push    sys_putcbuf
+		push    dword[stdoutfd]
+		call    _WriteConsoleA@20
+		; push	eax
+		; call	_putchar
+		; add	esp,4
+		ret
+
+sys_openmode:	db	"r",0
+
+sys_open:	push	sys_openmode	; c-addr --
+		push	eax
+		call	_fopen
+		add	esp,8
+		ret
+
+sys_close:	push	eax		; c-addr --
+		call	_fclose
+		add	esp,4
+		ret
+
+; fd -- c flag
+sys_readc:	cmp	eax,0
+		jz	sys_readc1
+		push	eax
+		call	_fgetc
+		add	esp,4
+		cmp	eax,-1
+		jz	sys_readc2
+		mov	ebx,1
+		ret
+sys_readc2:	mov	ebx,0
+		ret
+sys_readc1:	call	_getchar
+		mov	ebx,1
 		ret
 
 %endif
