@@ -4,16 +4,15 @@
 ;
 ; Description
 ; ===========
-; This program creates a Forth system for intel x86 computers. There
-; is quite a bit of condensed and distilled Forth wizardry here.
+; Beware, here be elemental FORTH wizardry.
+
+; This program creates a Forth system for intel x86 computers.
 ;
 ; Design
 ; ======
-; - Reasonably minimal machine dependent assembly code for
-;   portability/performance balance
-; - Subroutine threaded for performance
-; - Counted strings use 1 cell for the count (TODO adapt to standard)
-; - No "double" numbers (TODO adapt to standard)
+; - Reasonably minimal machine dependent assembly code
+; - Ease of porting to other architectures/platforms
+; - Aim for the sweet spot between Forth 83 and 94 standards
 ;
 ; Build
 ; =====
@@ -41,6 +40,8 @@
 ;   - find
 ;   - parse
 ;   - parse-name
+; - Counted strings use 1 cell for the count (TODO adapt to standard)
+; - No "double" numbers (TODO adapt to standard)
 ; - Consider using block words instead of open-file, etc.
 ; - Implement rest of the CORE word set
 ; - Add Windows support
