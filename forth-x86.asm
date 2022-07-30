@@ -5,7 +5,6 @@
 ; Description
 ; ===========
 ; Beware, here be elemental FORTH wizardry.
-
 ; This program creates a Forth system for intel x86 computers.
 ;
 ; Design
