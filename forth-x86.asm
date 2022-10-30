@@ -43,7 +43,7 @@
 ; - No "double" numbers (TODO adapt to standard)
 ; - Consider using block words instead of open-file, etc.
 ; - Implement rest of the CORE word set
-; - Add Windows support
+; - Add ability to call external c functions
 ; - Add PC boot support
 ; - Can we make it easy to convert to Z80? Meta primitives?
 ; - Consider using hand-encoded machine code source code
@@ -73,9 +73,9 @@ DIC_SIZ         equ     65536   ; Dictionary area
 TIB_SIZ         equ     1024    ; Temporary input buffer
 
 dstack:         resd    1024    ; Data stack
-dstacke:        equ     $
+dstacke:        equ     $-4
 rstack:         resd    1024    ; Return stack
-rstacke:        equ     $
+rstacke:        equ     $-4
 tib:            resd    TIB_SIZ ; Terminal input buffer area
 dictionary:     resd    DIC_SIZ ; Consider making this parametrized
 tempregs:       resd    16      ; Temporary storage for host registers
@@ -114,6 +114,7 @@ count_mask      equ     ~(m_immediate + m_compile_only)
 ; name          N bytes                 ; word name
 ; code          N bytes                 ; machine code
 
+; ( -- addr )
 w_dovar:        dd      0
                 dd      5
                 db      "(var)"
@@ -124,6 +125,7 @@ xt_dovar:       xchg    ebp,esp
                 add     esp,4
                 ret
 
+; ( -- n )
 w_doconst:      dd      w_dovar
                 dd      7
                 db      "(const)"
@@ -135,6 +137,7 @@ xt_doconst:     xchg    ebp,esp
                 add     esp,4
                 ret
 
+; ( -- n )
 w_dolit:        dd      w_doconst
                 dd      5
                 db      "(lit)"
@@ -145,74 +148,84 @@ xt_dolit:       xchg    ebp,esp
                 add     dword[esp],4
                 ret
 
+; ( -- n )
 w_cell:         dd      w_dolit
                 dd      4
                 db      "cell"
 xt_cell:        call    xt_doconst
 @_cell:         dd      4
 
+; ( -- addr )
 w_dp:           dd      w_cell
                 dd      2
                 db      "dp"
 xt_dp:          call    xt_dovar
 @_dp:           dd      dictionary
 
+; ( -- addr )
 w_num_tib:      dd      w_dp
                 dd      4
                 db      "#tib"
 xt_num_tib:     call    xt_dovar
 @_num_tib:      dd      0
 
+; ( -- addr )
 w_to_in:        dd      w_num_tib
                 dd      3
                 db      ">in"
 xt_to_in:       call    xt_dovar
 @_to_in:        dd      0
 
+; ( -- addr )
 w_state:        dd      w_to_in
                 dd      5
                 db      "state"
 xt_state:       call    xt_dovar
 @_state:        dd      0
 
+; ( -- addr )
 w_last:         dd      w_state
                 dd      4
                 db      "last"
 xt_last:        call    xt_dovar
 @_last:         dd      0
 
+; ( -- addr )
 w_source_id:    dd      w_last
                 dd      9
                 db      "source-id"
 xt_source_id:   call    xt_dovar
 @_source_id:    dd      0
 
-
+; ( -- addr )
 w_base:         dd      w_source_id
                 dd      4
                 db      "base"
 xt_base:        call    xt_dovar
 @_base:         dd      10
 
-
+; ( -- n )
 w_s0:           dd      w_base
                 dd      2
                 db      "s0"
 xt_s0:          call    xt_doconst
 @_s0:           dd      dstacke
 
+; ( -- n )
 w_r0:           dd      w_s0
                 dd      2
                 db      "r0"
 xt_r0:          call    xt_doconst
 @_r0:           dd      rstacke
 
+; ( -- n )
 w_tib:          dd      w_r0
                 dd      3
                 db      "tib"
 xt_tib:         call    xt_doconst
 @_tib:          dd      tib
 
+; ( -- )
 w_branch:       dd      w_tib
                 dd      8
                 db      "(branch)"
@@ -220,6 +233,7 @@ xt_branch:      pop     eax
                 mov     eax,[eax]
                 jmp     eax
 
+; ( n -- )
 w_0branch:      dd      w_branch
                 dd      9
                 db      "(0branch)"
@@ -234,6 +248,7 @@ xt_0branch:     xchg    ebp,esp
 _0branch_nz:    add     dword[esp],4
                 ret
 
+; ( -- )
 w_bye:          dd      w_0branch
                 dd      3
                 db      "bye"
@@ -241,6 +256,7 @@ xt_bye:         mov     ebp,[tempregs+0]
                 mov     esp,[tempregs+1]
                 call    sys_bye
 
+; ( addr -- )
 w_execute:      dd      w_bye
                 dd      7
                 db      "execute"
@@ -251,6 +267,7 @@ xt_execute:     xchg    ebp,esp
                 push    eax
                 ret
 
+; ( n addr -- )
 w_store:        dd      w_execute
                 dd      1
                 db      "!"
@@ -261,6 +278,7 @@ xt_store:       xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( addr -- n )
 w_fetch:        dd      w_store
                 dd      1
                 db      "@"
@@ -270,6 +288,7 @@ xt_fetch:       xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( c addr -- )
 w_cstore:       dd      w_fetch
                 dd      2
                 db      "c!"
@@ -280,6 +299,7 @@ xt_cstore:      xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( addr -- c )
 w_cfetch:       dd      w_cstore
                 dd      2
                 db      "c@"
@@ -291,6 +311,7 @@ xt_cfetch:      xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n n -- n )
 w_plus:         dd      w_cfetch
                 dd      1
                 db      "+"
@@ -302,6 +323,7 @@ xt_plus:        xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n n -- n )
 w_minus:        dd      w_plus
                 dd      1
                 db      "-"
@@ -313,6 +335,7 @@ xt_minus:       xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( u1 u2 -- ud )
 w_um_star:      dd      w_minus
                 dd      3
                 db      "um*"
@@ -326,6 +349,7 @@ xt_um_star:     xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( ud u1 -- u2 u3 )
 w_um_mod:       dd      w_um_star
                 dd      6
                 db      "um/mod"
@@ -339,6 +363,7 @@ xt_um_mod:      xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n -- ) ( R: -- n )
 w_to_r:         dd      w_um_mod
                 dd      2
                 db      ">r"
@@ -350,6 +375,7 @@ xt_to_r:        pop     eax
                 push    eax
                 ret
 
+; ( -- n ) ( R: n -- )
 w_r_from:       dd      w_to_r
                 dd      2
                 db      "r>"
@@ -361,6 +387,7 @@ xt_r_from:      pop     eax
                 push    eax
                 ret
 
+; ( n n -- n )
 w_and:          dd      w_r_from
                 dd      3
                 db      "and"
@@ -372,6 +399,7 @@ xt_and:         xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n n -- n )
 w_or:           dd      w_and
                 dd      2
                 db      "or"
@@ -383,6 +411,7 @@ xt_or:          xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n n -- n )
 w_xor:          dd      w_or
                 dd      3
                 db      "xor"
@@ -394,6 +423,7 @@ xt_xor:         xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n n -- t )
 w_equals:       dd      w_xor
                 dd      1
                 db      "="
@@ -408,6 +438,7 @@ xt_equals1:     push    -1
 xt_equals2:     xchg    ebp,esp
                 ret
 
+; ( n n -- t )
 w_notequals:    dd      w_equals
                 dd      2
                 db      "<>"
@@ -415,6 +446,7 @@ xt_notequals:   call    xt_equals
                 call    xt_invert
                 ret
 
+; ( n -- n )
 w_invert:       dd      w_notequals
                 dd      6
                 db      "invert"
@@ -423,6 +455,7 @@ xt_invert:      call    xt_dolit
                 call    xt_xor
                 ret
 
+; ( n -- t )
 w_zero_less:    dd      w_invert
                 dd      2
                 db      "0<"
@@ -437,6 +470,7 @@ xt_zero_less_e: push    eax
                 xchg    ebp,esp
                 ret
 
+; ( n n -- t )
 w_less:         dd      w_zero_less
                 dd      4
                 db      "less"
@@ -451,6 +485,7 @@ xt_less1:       push    dword -1
 xt_less2:       xchg    ebp,esp
                 ret
 
+; ( n n -- t)
 w_more:         dd      w_less
                 dd      4
                 db      "more"
@@ -465,6 +500,7 @@ xt_more1:       push    dword -1
 xt_more2:       xchg    ebp,esp
                 ret
 
+; ( n1 n2 -- n2 n1 )
 w_swap:         dd      w_more
                 dd      4
                 db      "swap"
@@ -474,6 +510,7 @@ xt_swap:        mov     eax,[ebp]
                 mov     [ebp+4],eax
                 ret
 
+; ( n1 n2 n3 -- n2 n3 n1 )
 w_rot:          dd      w_swap
                 dd      3
                 db      "rot"
@@ -487,12 +524,14 @@ xt_rot:         xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n -- )
 w_drop:         dd      w_rot
                 dd      4
                 db      "drop"
 xt_drop:        add     ebp,4
                 ret
 
+; ( n1 -- n1 n1 )
 w_dup:          dd      w_drop
                 dd      3
                 db      "dup"
@@ -501,6 +540,7 @@ xt_dup:         xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n1 n2 -- n1 n2 n1 )
 w_over:         dd      w_dup
                 dd      4
                 db      "over"
@@ -513,6 +553,7 @@ xt_over:        xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( -- n )
 w_key:          dd      w_over
                 dd      3
                 db      "key"
@@ -523,6 +564,7 @@ xt_key:         mov     eax,[@_source_id]
                 xchg    ebp,esp
                 ret
 
+; ( n -- )
 w_emit:         dd      w_key
                 dd      4
                 db      "emit"
@@ -532,6 +574,7 @@ xt_emit:        xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( n -- )
 w_comma:        dd      w_emit
                 dd      1
                 db      ","
@@ -543,6 +586,7 @@ comma:          mov     ebx,[@_dp]
                 add     dword[@_dp],4
                 ret
 
+; ( c -- )
 w_c_comma:      dd      w_comma
                 dd      2
                 db      "c,"
@@ -554,6 +598,7 @@ xt_c_comma:     xchg    ebp,esp
                 inc     dword[@_dp]
                 ret
 
+; ( addr -- addr )
 w_nfa:          dd      w_c_comma
                 dd      3
                 db      "nfa"
@@ -569,6 +614,7 @@ xt_nfa:         xchg    ebp,esp
 nfa:            add     eax,4
                 ret
 
+; ( addr -- addr )
 w_cfa:          dd      w_nfa
                 dd      3
                 db      "cfa"
@@ -581,7 +627,6 @@ xt_cfa:         xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
-; addr -- addr
 cfa:            call    nfa
                 mov     ebx,[eax]
                 and     ebx,count_mask
@@ -589,6 +634,7 @@ cfa:            call    nfa
                 add     eax,ebx
                 ret
 
+; ( -- addr )
 w_sp_fetch:     dd      w_cfa
                 dd      3
                 db      "sp@"
@@ -597,6 +643,7 @@ xt_sp_fetch:    xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( addr -- )
 w_sp_store:     dd      w_sp_fetch
                 dd      3
                 db      "sp!"
@@ -606,6 +653,7 @@ xt_sp_store:    xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( -- addr )
 w_rp_fetch:     dd      w_sp_store
                 dd      3
                 db      "rp@"
@@ -614,6 +662,7 @@ xt_rp_fetch:    xchg    ebp,esp
                 xchg    ebp,esp
                 ret
 
+; ( addr -- )
 w_rp_store:     dd      w_rp_fetch
                 dd      3
                 db      "rp!"
@@ -627,6 +676,7 @@ xt_rp_store:    xchg    ebp,esp
 ;                       Hand coded Forth words
 ; ====================================================================== ;
 
+; ( n1 n2 -- n1 n2 n1 n2 )
 w_2dup:         dd      w_rp_store
                 dd      4
                 db      "2dup"
@@ -634,6 +684,7 @@ xt_2dup:        call    xt_over
                 call    xt_over
                 ret
 
+; ( n1 n2 n3 -- n3 n1 n2 )
 w_dash_rot:     dd      w_2dup
                 dd      4
                 db      "-rot"
@@ -641,6 +692,7 @@ xt_dash_rot:    call    xt_rot
                 call    xt_rot
                 ret
 
+; ( -- addr )
 w_here:         dd      w_dash_rot
                 dd      4
                 db      "here"
@@ -648,6 +700,7 @@ xt_here:        call    xt_dp
                 call    xt_fetch
                 ret
 
+; ( -- )
 w_backspace:    dd      w_here
                 dd      8
                 db      "backspace"
@@ -663,9 +716,6 @@ xt_backspace:   call    xt_dolit
                 call    xt_emit
                 ret
 
-w_accept:       dd      w_backspace
-                dd      6
-                db      "accept"
 ; : accept ( addr n -- n )
 ;   2dup
 ;   begin
@@ -682,6 +732,9 @@ w_accept:       dd      w_backspace
 ;   repeat drop
 ;   drop swap drop swap -
 ; ;
+w_accept:       dd      w_backspace
+                dd      6
+                db      "accept"
 xt_accept:      call    xt_2dup
 xt_accept1:     call    xt_key
                 call    xt_dup
@@ -704,8 +757,6 @@ xt_accept1:     call    xt_key
                 call    xt_0branch
                 dd      xt_accept3
                 call    xt_drop
-; backspace handling can be removed when the outer interpreter
-; is compiled via source
                 call    xt_backspace
                 call    xt_swap
                 call    xt_dolit
@@ -738,10 +789,10 @@ xt_accept2:     call    xt_drop
                 call    xt_minus
                 ret
 
+; : refill tib 80 accept #tib ! 0 >in ! 0 ;
 w_refill:       dd      w_accept
                 dd      6
                 db      "refill"
-; : refill tib 80 accept #tib ! 0 >in ! 0 ;
 xt_refill:      call    xt_tib
                 call    xt_dolit
                 dd      80
@@ -780,10 +831,10 @@ xt_more_or_equal:
                 call    xt_more
                 ret
 
+; : between rot swap over >= -rot <= and ;
 w_between:      dd      w_more_or_equal
                 dd      7
                 db      "between"
-; : between rot swap over >= -rot <= and ;
 xt_between:     call    xt_rot
                 call    xt_swap
                 call    xt_over
@@ -793,9 +844,6 @@ xt_between:     call    xt_rot
                 call    xt_and
                 ret
 
-w_tonumber:     dd      w_between
-                dd      7
-                db      ">number"
 ; : >number  ( c-addr1 u1 -- n flag )
 ;   over c@ 45 =          ( is minus sign? )
 ;   if -1 -rot ( sign ) 1- swap 1+ swap ( skip sign char )
@@ -815,6 +863,9 @@ w_tonumber:     dd      w_between
 ;   2drop
 ;   r> * true
 ; ;
+w_tonumber:     dd      w_between
+                dd      7
+                db      ">number"
 xt_tonumber:    call    xt_over
                 call    xt_cfetch
                 call    xt_dolit
@@ -914,9 +965,6 @@ xt_tonumber8:   call    xt_r_from
                 dd      -1
                 ret
 
-w_cmove:        dd      w_tonumber
-                dd      5
-                db      "cmove"
 ; : cmove ( c-addr1 c-addr2 u -- )
 ;   begin
 ;     dup 0<>
@@ -928,6 +976,9 @@ w_cmove:        dd      w_tonumber
 ;     1-                 ( decrement u )
 ;   repeat 2drop drop
 ; ;
+w_cmove:        dd      w_tonumber
+                dd      5
+                db      "cmove"
 xt_cmove:       call    xt_dup
                 call    xt_dolit
                 dd      0
@@ -957,9 +1008,6 @@ xt_cmove2:      call    xt_drop
                 call    xt_drop
                 ret
 
-w_colon:        dd      w_cmove
-                dd      1
-                db      ":"
 ; : : parse-name       ( c-addr n )
 ;     dup rot swap     ( n caddr n )
 ;     here             ( save here )
@@ -970,6 +1018,9 @@ w_colon:        dd      w_cmove
 ;     here + dp !      ( advance dp )
 ;     -1 state !
 ; ;
+w_colon:        dd      w_cmove
+                dd      1
+                db      ":"
 xt_colon:       call    xt_parse_name
                 call    xt_dup
                 call    xt_rot
@@ -1023,105 +1074,23 @@ xt_compile_comma:
                 call    xt_comma
                 ret
 
-compare_a:      resd    1
-compare_n:      resd    1
-compare_b:      resd    1
-compare_u:      resd    1
-
-w_compare:      dd      w_compile_comma
-                dd      7
-                db      "compare"
-                xchg    ebp,esp
-                pop     edx
-                pop     ecx
-                pop     ebx
-                pop     eax
-                xchg    ebp,esp
-                call    compare
-                xchg    ebp,esp
-                push    eax
-                xchg    ebp,esp
-                ret
-
-; c-addr1 u1 c-addr2 u2 -- flag
-; note that it is case insensitive
-compare:        mov     [compare_a],eax
-                mov     [compare_n],ebx
-                mov     [compare_b],ecx
-                cmp     dword[compare_n],edx
-                jz      compare_s       ; if counts not match
-                mov     eax,-1          ; return false
-                ret
-compare_s:      mov     ecx,0           ; set found flag
-compare2:       xor     eax,eax
-                mov     al,[compare_n]
-                cmp     al,0
-                jz      compare_e
-                mov     ebx,[compare_a]
-                xor     eax,eax
-                mov     al,byte[ebx]
-                mov     ecx,[compare_b]
-                xor     ebx,ebx
-                mov     bl,byte[ecx]
-                bts     eax,5
-                bts     ebx,5
-                cmp     al,bl
-                jnz     compare1
-                inc     dword[compare_a]
-                inc     dword[compare_b]
-                dec     dword[compare_n]
-                jmp     compare2
-compare1:       mov     ecx,-1          ; clear found flag
-compare_e:      mov     eax,ecx
-                ret
-
-find_str:       resd    1
-find_u:         resd    1
-find_curlink:   resd    1
-
-w_find:         dd      w_compare
-                dd      4
-                db      "find"
-xt_find:        xchg    ebp,esp
-                pop     ebx
-                pop     eax
-                xchg    ebp,esp
-                call    find
-                xchg    ebp,esp
-                push    eax
-                xchg    ebp,esp
-                ret
-
-; c-addr u -- xt
-find:           mov     [find_str],eax
-                mov     [find_u],ebx
-                mov     eax,[@_last]    ; link
-                mov     [find_curlink],eax
-find1:          mov     eax,[find_curlink]
-                add     eax,4           ; we are at count
-                mov     ebx,[eax]       ; count
-                and     ebx,count_mask
-                add     eax,4           ; name
-                mov     ecx,[find_str]
-                mov     edx,[find_u]
-                call    compare
-                cmp     eax,-1
-                jz      find_n          ; not found
-                mov     eax,[find_curlink]
-                call    nfa
-                mov     eax,[find_curlink]
-                ret                     ; found and return
-find_n:         mov     eax,[find_curlink]
-                mov     eax,[eax]       ; next link
-                or      eax,eax
-                jz      find_e
-                mov     [find_curlink],eax
-                jmp     find1
-find_e:         mov     eax,0
-                ret
+; : space?	( c -- t )	dup 32 = swap 9 = or ;
+w_space_q:	dd      w_compile_comma
+		dd 	6
+		db	"space?"
+xt_space_q:	call	xt_dup
+		call	xt_dolit
+		dd	32
+		call	xt_equals
+		call	xt_swap
+		call	xt_dolit
+		dd	9
+		call	xt_equals
+		call	xt_or
+		ret
 
 ; ( char "ccc<char>" -- c-addr u )
-w_parse:        dd      w_find
+w_parse:        dd      w_space_q
                 dd      5
                 db      "parse"
 xt_parse:       mov     eax,[@_tib]
@@ -1162,15 +1131,20 @@ xt_parse_name:  mov     eax,[@_tib]
                 mov     ecx,eax         ; backup first c-addr
 _parse_name2:   cmp     eax,edx
                 jz      _parse_name1
-                cmp     byte[eax],32
-                jnz     _parse_name1
-                inc     eax
+                cmp     byte[eax],32    ; space
+                jz      _parse_name5
+		cmp	byte[eax],9	; tab
+		jz	_parse_name5
+		jmp	_parse_name1
+_parse_name5:   inc     eax
                 jmp     _parse_name2
 _parse_name1:   mov     ebx,eax         ; backup begin c-addr
 _parse_name4:   cmp     eax,edx
                 jz      _parse_name3
-                cmp     byte[eax],32
+                cmp     byte[eax],32	; space
                 jz      _parse_name3
+		cmp     byte[eax],9     ; tab
+		jz      _parse_name3
                 inc     eax
                 jmp     _parse_name4
 _parse_name3:   mov     edx,eax
@@ -1183,7 +1157,115 @@ _parse_name3:   mov     edx,eax
                 xchg    ebp,esp
                 ret
 
-last            equ     w_parse_name
+w_compare:      dd      w_parse_name
+                dd      7
+                db      "compare"
+; : compare     ( caddr1 u1 caddr2 u2 -- t )
+;    rot 2dup <>                  ( caddr1 caddr2 u1 u2 t )
+;    if 2drop 2drop false exit
+;    else drop then               ( caddr1 caddr2 u2 )
+;    begin
+;     dup
+;    while
+;     >r                          ( caddr1 caddr2 )
+;     over c@ over c@             ( caddr1 caddr2 c1 c2 )
+;     <> if rdrop 2drop false exit then
+;     r>                          ( caddr1 caddr2 u2 )
+;     1-
+;    repeat
+;    drop 2drop true ;
+xt_compare:     call    xt_rot
+                call    xt_2dup
+                call    xt_notequals
+                call    xt_0branch
+                dd      xt_compare1
+                call    xt_drop
+                call    xt_drop
+                call    xt_drop
+                call    xt_drop
+                call    xt_dolit
+                dd      0
+                ret
+xt_compare1:    call    xt_drop
+xt_compare2:    call    xt_dup
+                call    xt_0branch
+                dd      xt_compare3
+                call    xt_to_r
+                call    xt_over
+                call    xt_cfetch
+                call    xt_over
+                call    xt_cfetch
+                call    xt_notequals
+                call    xt_0branch
+                dd      xt_compare4
+                call    xt_r_from
+                call    xt_drop
+                call    xt_drop
+                call    xt_drop
+                call    xt_dolit
+                dd      0
+                ret
+xt_compare4:    call    xt_r_from
+                call    xt_dolit
+                dd      1
+                call    xt_minus
+                jmp     xt_compare2
+xt_compare3:    call    xt_drop
+                call    xt_drop
+                call    xt_drop
+                call    xt_dolit
+                dd      -1
+                ret
+
+w_find:         dd      w_compare
+                dd      4
+                db      "find"
+; : find                ( caddr u -- xt )
+;    2dup                        ( caddr u caddr u )
+;    last @                      ( caddr u caddr u addr )
+;    begin
+;     dup
+;    while
+;     dup >r                     ( caddr u caddr u addr )
+;     nfa count #mask invert and ( caddr u caddr u caddr2 u2 )
+;     compare if 2drop r> exit then
+;     2dup                       ( caddr u caddr u )
+;     r> @
+;    repeat
+; ;
+xt_find:        call	xt_2dup
+		call	xt_last
+		call	xt_fetch
+xt_find1:	call	xt_dup
+		call	xt_0branch
+		dd	xt_find2
+		call	xt_dup
+		call	xt_to_r
+		call	xt_nfa
+; : count
+    	      	call    xt_dup
+		call	xt_cell
+		call	xt_plus
+		call	xt_swap
+		call	xt_fetch
+; ;
+		call	xt_dolit
+		dd	count_mask
+		call	xt_and
+		call	xt_compare
+		call	xt_0branch
+		dd	xt_find3
+		call	xt_drop
+		call	xt_drop
+		call	xt_r_from
+		ret
+xt_find3:	call	xt_2dup
+		call	xt_r_from
+		call	xt_fetch
+		jmp	xt_find1
+xt_find2:	ret
+
+last            equ     w_find
 
 ; ====================================================================== ;
 ;                         Inner Interpreter
@@ -1194,6 +1276,76 @@ last            equ     w_parse_name
 ; interpreter.
 ;
                             section .text
+
+compare_a:      resd    1
+compare_n:      resd    1
+compare_b:      resd    1
+compare_u:      resd    1
+
+; c-addr1 u1 c-addr2 u2 -- flag
+; note that it is case insensitive
+compare:        mov     [compare_a],eax
+                mov     [compare_n],ebx
+                mov     [compare_b],ecx
+                cmp     dword[compare_n],edx
+                jz      compare_s       ; if counts not match
+                mov     eax,-1          ; return false
+                ret
+compare_s:      mov     ecx,0           ; set found flag
+compare2:       xor     eax,eax
+                mov     al,[compare_n]
+                cmp     al,0
+                jz      compare_e
+                mov     ebx,[compare_a]
+                xor     eax,eax
+                mov     al,byte[ebx]
+                mov     ecx,[compare_b]
+                xor     ebx,ebx
+                mov     bl,byte[ecx]
+                bts     eax,5
+                bts     ebx,5
+                cmp     al,bl
+                jnz     compare1
+                inc     dword[compare_a]
+                inc     dword[compare_b]
+                dec     dword[compare_n]
+                jmp     compare2
+compare1:       mov     ecx,-1          ; clear found flag
+compare_e:      mov     eax,ecx
+                ret
+
+
+find_str:       resd    1
+find_u:         resd    1
+find_curlink:   resd    1
+
+; c-addr u -- xt
+find:           mov     [find_str],eax
+                mov     [find_u],ebx
+                mov     eax,[@_last]    ; link
+                mov     [find_curlink],eax
+find1:          mov     eax,[find_curlink]
+                add     eax,4           ; we are at count
+                mov     ebx,[eax]       ; count
+                and     ebx,count_mask
+                add     eax,4           ; name
+                mov     ecx,[find_str]
+                mov     edx,[find_u]
+                call    compare
+                cmp     eax, -1
+                jz      find_n          ; not found
+                mov     eax,[find_curlink]
+                ret                     ; found and return
+find_n:         mov     eax,[find_curlink]
+                mov     eax,[eax]       ; next link
+                or      eax,eax
+                jz      find_e
+                mov     [find_curlink],eax
+                jmp     find1
+find_e:         mov     eax,0
+                ret
+
+
 
 filename:       db      "forth.fs",0
 filename_len:   equ     $-filename
@@ -1294,9 +1446,9 @@ readline1:      mov     eax,[@_num_tib]
                 test    ebx,ebx
                 jz      readline_eof
 ; Echo the characters
-;               push    eax
-;               call    sys_putc
-;               pop     eax
+               ; push    eax
+               ; call    sys_putc
+               ; pop     eax
                 cmp     al,10           ; new line
                 jz      readline_e
                 cmp     al,13           ; new line
@@ -1326,7 +1478,18 @@ interpret:      call    xt_parse_name
                 cmp     ebx,0
                 jz      interpret_end
 
+		mov     [find_str],eax
+                mov     [find_u],ebx
                 call    find
+		; xchg	ebp,esp
+		; push	eax
+		; push	ebx
+		; xchg	ebp,esp
+		; call	xt_find
+		; xchg	ebp,esp
+		; pop	eax
+		; xchg	ebp,esp
+
                 or      eax,eax
                 jz      interpret_to_tonumber
 
@@ -1454,7 +1617,6 @@ quit1:          call    interpret
                 jz      quit2
                 jmp     quit_begin
 quit2:          call    xt_s0
-                call    xt_plus
                 call    xt_sp_store
                 jmp     quit_begin
 quit_end:       mov     eax,quit_error$
