@@ -313,19 +313,36 @@ variable (i)
    repeat
 ;
 
-: parse		( char "ccc<char>" -- c-addr u )
-   >r
-   tib
-   >in @ 1+ +                   ( addr )
+: parse         ( char "ccc<char>" -- c-addr u )
+   >in @ 1+ tib + swap          ( caddr c )
    begin
-    dup c@ r@ <>                ( char is not yet found )
-    over #tib @ <> or invert    ( and addr is not #tib )
+    over c@ over <> >r          ( caddr c )
+    over tib #tib @ + <>        ( caddr c )
+    r> and
    while
-    1+                          ( next addr )
+    swap 1+ swap                ( next addr )
    repeat
-   rdrop
-   dup tib -                    ( addr u )
-   dup >in @ + >in !
+   drop                         ( caddr )
+   tib >in @ + 1+               ( caddr c-addr )
+   over tib >in @ + - 1-        ( caddr c-addr u )
+   rot tib - 1+ >in !
 ;
 
-: space?	( c -- t )	dup 32 = swap 9 = or ;
+: space?        ( c -- t )      dup 32 = swap 9 = or ;
+
+: parse-name
+   >in @ 1+ tib +       ( caddr )
+   begin
+      dup c@ 32 <>      ( caddr t )
+      over c@ 10 <>     ( fixme should check for #tib instead )
+      and               ( caddr t )
+   while
+      1+
+   repeat
+   tib - >in !
+   32 parse 
+;
+
+: check-depth depth 0<> if ." Depth is not zero" .s then ;
+
+check-depth

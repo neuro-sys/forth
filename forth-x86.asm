@@ -39,6 +39,8 @@
 ;   - find
 ;   - parse
 ;   - parse-name
+;   - interpret
+;   - quit
 ; - Counted strings use 1 cell for the count (TODO adapt to standard)
 ; - No "double" numbers (TODO adapt to standard)
 ; - Consider using block words instead of open-file, etc.
@@ -1046,6 +1048,8 @@ xt_colon:       call    xt_parse_name
                 call    xt_store
                 ret
 
+
+; This is specific to the STC model we use
 w_semicolon:    dd      w_colon
                 dd      1 + m_immediate
                 db      ";"
@@ -1058,13 +1062,14 @@ xt_semicolon:   call    xt_dolit
                 call    xt_store
                 ret
 
+; This is specific to the STC model we use
 w_compile_comma:
                 dd      w_semicolon
                 dd      8
                 db      "compile,"
 xt_compile_comma:
                 call    xt_dolit
-                dd      0xe8
+                dd      0xe8	; compile call
                 call    xt_c_comma
                 call    xt_dp
                 call    xt_fetch
@@ -1090,40 +1095,112 @@ xt_space_q:	call	xt_dup
 		ret
 
 ; ( char "ccc<char>" -- c-addr u )
+; : parse         ( char "ccc<char>" -- c-addr u )
+;    >in @ 1+ tib + swap          ( caddr c )
+;    begin
+;     over c@ over <> >r          ( caddr c )
+;     over tib #tib @ + <>        ( caddr c )
+;     r> and
+;    while
+;     swap 1+ swap                ( next addr )
+;    repeat
+;    drop                         ( caddr )
+;    tib >in @ + 1+               ( caddr c-addr )
+;    over tib >in @ + - 1-        ( caddr c-addr u )
+;    rot tib - 1+ >in !
+; ;
 w_parse:        dd      w_space_q
                 dd      5
                 db      "parse"
-xt_parse:       mov     eax,[@_tib]
-                mov     edx,eax
-                inc     dword[@_to_in]  ; skip current character
-                add     eax,[@_to_in]
-                add     edx,[@_num_tib] ; eol
-                mov     ecx,eax         ; begin
-                xchg    ebp,esp
-                pop     ebx             ; char
-                xchg    ebp,esp
-_parse2:        cmp     eax,edx
-                jz      _parse1
-                cmp     byte[eax],bl
-                jz      _parse1
-                inc     eax
-                jmp     _parse2
-_parse1:        mov     edx,eax
-                sub     edx,ecx         ; edx offset
-                add     [@_to_in],edx
-                inc     dword[@_to_in]
-                xchg    ebp,esp
-                push    ecx
-                push    edx
-                xchg    ebp,esp
-                ret
-
+xt_parse:       call    xt_to_in
+		call	xt_fetch
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_tib
+		call	xt_plus
+		call	xt_swap
+xt_parse1:	call	xt_over
+		call	xt_cfetch
+		call	xt_over
+		call	xt_notequals
+		call	xt_to_r
+		call	xt_over
+		call	xt_tib
+		call	xt_num_tib
+		call	xt_fetch
+		call	xt_plus
+		call	xt_notequals
+		call	xt_r_from
+		call	xt_and
+		call	xt_0branch
+		dd	xt_parse2
+		call	xt_swap
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_swap
+		jmp	xt_parse1
+xt_parse2:	call	xt_drop
+		call	xt_tib
+		call	xt_to_in
+		call	xt_fetch
+		call	xt_plus
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_over
+		call	xt_tib
+		call	xt_to_in
+		call	xt_fetch
+		call	xt_plus
+		call	xt_minus
+		call	xt_dolit
+		dd	1
+		call	xt_minus
+		call	xt_rot
+		call	xt_tib
+		call	xt_minus
+		call	xt_dolit
+		dd	1
+		call	xt_plus
+		call	xt_to_in
+		call	xt_store
+		ret
 
 ; ( "<spaces>name<space>" -- c-addr u)
-; FIXME, can use PARSE?
 w_parse_name:   dd      w_parse
                 dd      10
                 db      "parse-name"
+; xt_parse_name:
+; 		call	xt_to_in
+; 		call	xt_fetch
+; 		call	xt_dolit
+; 		dd	1
+; 		call	xt_tib
+; 		call	xt_plus
+; xt_parse_nam1:	call	xt_dup
+; 		call	xt_cfetch
+; 		call	xt_dolit
+; 		dd	32
+; 		call	xt_notequals
+; 		call	xt_over
+; 		call	xt_cfetch
+; 		call	xt_dolit
+; 		dd	10
+; 		call	xt_notequals
+; 		call	xt_and
+; 		call	xt_0branch
+; 		dd	xt_parse_nam2
+; 		call	xt_dolit
+; 		dd	1
+; 		call	xt_plus
+; xt_parse_nam2:	call	xt_drop
+; 		call	xt_dolit
+; 		dd	32
+; 		call	xt_parse
+; 		ret
+
 xt_parse_name:  mov     eax,[@_tib]
                 mov     edx,eax
                 add     eax,[@_to_in]
